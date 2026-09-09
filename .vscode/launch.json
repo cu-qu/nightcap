@@ -1,0 +1,108 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Django: runserver (debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/manage.py",
+      "args": ["runserver", "0.0.0.0:8000", "--noreload"],
+      "django": true,
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "config.settings.local",
+        "PYTHONUNBUFFERED": "1"
+      },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Django: runserver (with reload)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/manage.py",
+      "args": ["runserver", "0.0.0.0:8000"],
+      "django": true,
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "config.settings.local",
+        "PYTHONUNBUFFERED": "1"
+      },
+      "console": "integratedTerminal",
+      "subProcess": true
+    },
+    {
+      "name": "Celery: worker",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "args": ["-A", "config", "worker", "-Q", "main,celery", "-l", "info"],
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "config.settings.local"
+      },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Celery: beat",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "args": ["-A", "config", "beat", "-l", "info"],
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "config.settings.local"
+      },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Expo: Start",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm start",
+      "cwd": "${workspaceFolder}/mobile"
+    },
+    {
+      "name": "Expo: iOS",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run ios",
+      "cwd": "${workspaceFolder}/mobile"
+    },
+    {
+      "name": "Expo: Android",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run android",
+      "cwd": "${workspaceFolder}/mobile"
+    },
+    {
+      "name": "Expo: Start (tunnel)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run start:tunnel",
+      "cwd": "${workspaceFolder}/mobile"
+    },
+    {
+      "name": "Expo: Clear cache & start",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run start:clear",
+      "cwd": "${workspaceFolder}/mobile"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "All services",
+      "configurations": ["Django: runserver (debug)", "Expo: Start"],
+      "stopAll": true
+    }
+  ]
+}

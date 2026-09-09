@@ -1,0 +1,4 @@
+# Override for Dev Containers: app stays alive so the IDE can attach; runserver runs via postStartCommand.
+services:
+  app:
+    command: sleep infinity

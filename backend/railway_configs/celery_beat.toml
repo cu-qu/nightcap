@@ -1,0 +1,7 @@
+[build]
+builder = "railpack"
+buildCommand = "bash ./build.sh"
+
+[deploy]
+startCommand = "celery -A config beat -l info"
+restartPolicyType = "never"

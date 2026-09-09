@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Expo: Start",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm start",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Expo: iOS",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run ios",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Expo: Android",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run android",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Expo: Start (tunnel)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run start:tunnel",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Expo: Clear cache & start",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run start:clear",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

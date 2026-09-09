@@ -1,0 +1,59 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Django: compose up",
+      "type": "shell",
+      "command": "docker compose up --build",
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Django: migrate",
+      "type": "shell",
+      "command": "python manage.py migrate",
+      "options": {
+        "cwd": "${workspaceFolder}/backend",
+        "env": {
+          "DJANGO_SETTINGS_MODULE": "config.settings.local"
+        }
+      }
+    },
+    {
+      "label": "expo: start",
+      "type": "npm",
+      "script": "start",
+      "path": "mobile/",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "expo: ios",
+      "type": "npm",
+      "script": "ios",
+      "path": "mobile/",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "expo: android",
+      "type": "npm",
+      "script": "android",
+      "path": "mobile/",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
+}

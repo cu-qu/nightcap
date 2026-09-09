@@ -1,0 +1,12 @@
+Django==5.2.12
+celery==5.6.2
+dj-database-url==2.3.0
+django-anymail[resend]==14.0
+django-cors-headers==4.9.0
+django-filter==24.3
+djangorestframework==3.16.1
+djangorestframework_simplejwt==5.5.1
+drf-spectacular==0.29.0
+gunicorn==25.1.0
+psycopg[binary]==3.3.3
+redis==5.3.1

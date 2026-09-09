@@ -1,0 +1,158 @@
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+
+import { ApiError } from "@/src/api/client";
+import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
+import { useAuthStore } from "@/src/store/authStore";
+import { useCategoriesStore } from "@/src/store/categoriesStore";
+import { colors } from "@/src/theme/colors";
+
+export default function LoginScreen() {
+  const router = useRouter();
+  const login = useAuthStore((s) => s.login);
+  const loadCategories = useCategoriesStore((s) => s.load);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit() {
+    setError(null);
+    setLoading(true);
+    try {
+      await login(username.trim(), password);
+      await loadCategories();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not sign in");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Screen>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.flex}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.brand}>NightCap</Text>
+          <Text style={styles.subtitle}>
+            End the day gently. Track spend, habits, and a good note.
+          </Text>
+
+          <Text style={styles.label}>Username</Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={username}
+            onChangeText={setUsername}
+            placeholder="yourname"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+          />
+
+          <Text style={styles.label}>Password</Text>
+          <TextInput
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            placeholder="••••••••"
+            placeholderTextColor={colors.muted}
+            style={[styles.input, styles.inputLast]}
+          />
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          <PrimaryButton
+            title="Sign in"
+            onPress={() => void onSubmit()}
+            loading={loading}
+            disabled={!username.trim() || !password}
+          />
+
+          <View style={styles.footer}>
+            <Text style={styles.footerMuted}>New here? </Text>
+            <Pressable
+              hitSlop={8}
+              onPress={() => router.push("/(auth)/register")}
+            >
+              <Text style={styles.footerLink}>Create account</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  content: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 48,
+  },
+  brand: {
+    marginBottom: 8,
+    fontSize: 36,
+    fontWeight: "700",
+    color: colors.accentSoft,
+  },
+  subtitle: {
+    marginBottom: 40,
+    fontSize: 16,
+    color: colors.muted,
+  },
+  label: {
+    marginBottom: 8,
+    fontSize: 14,
+    color: colors.muted,
+  },
+  input: {
+    marginBottom: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.elevated,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    fontSize: 16,
+    color: colors.text,
+  },
+  inputLast: {
+    marginBottom: 24,
+  },
+  error: {
+    marginBottom: 16,
+    fontSize: 14,
+    color: colors.danger,
+  },
+  footer: {
+    marginTop: 24,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  footerMuted: {
+    color: colors.muted,
+  },
+  footerLink: {
+    fontWeight: "600",
+    color: colors.accentSoft,
+  },
+});
