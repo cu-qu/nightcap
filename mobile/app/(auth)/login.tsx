@@ -51,7 +51,7 @@ export default function LoginScreen() {
         >
           <Text style={styles.brand}>NightCap</Text>
           <Text style={styles.subtitle}>
-            End the day gently. Track spend, habits, and a good note.
+            Couple habit tracking — spend, workouts, and the little things, together or on your own.
           </Text>
 
           <Text style={styles.label}>Username</Text>

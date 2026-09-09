@@ -13,8 +13,11 @@ Django REST API for the NightCap iOS habit and budget tracker.
 
 ### Dev Containers (recommended)
 
-1. Open the `backend/` folder in Cursor or VS Code (or open this monorepo and select the backend folder).
+1. Open the **nightcap** repo root in Cursor or VS Code.
 2. Command Palette → **Dev Containers: Reopen in Container**.
+3. The root container starts PostgreSQL, Redis, Celery, and Expo. Start Django with **Run and Debug** → **Django: runserver (debug)**. API: http://localhost:8002 — Expo: http://localhost:8082
+
+To use this backend folder on its own instead: open `backend/` and **Dev Containers: Reopen in Container**.
 3. Wait for the container build, migrations, and runserver startup.
 4. API: http://localhost:8000 — docs: http://localhost:8000/api/docs/
 
@@ -40,11 +43,14 @@ API docs are available at http://localhost:8000/api/docs/.
 
 ## API Overview
 
-- `POST /api/v1/auth/register/`
+- `POST /api/v1/auth/register/` (optional `invite_code`)
 - `POST /api/v1/auth/token/`
 - `POST /api/v1/auth/token/refresh/`
 - `GET/PATCH /api/v1/auth/me/`
 - `GET/PATCH /api/v1/auth/profile/`
+- `GET/POST /api/v1/partnership/` — couple space + invite code
+- `POST /api/v1/partnership/invite/` / `join/`
+- `POST /api/v1/onboarding/setup/` — solo vs couple, templates, optional email invite
 - `GET/POST /api/v1/categories/` (includes stable `uuid` and optional `group`)
 - `GET/POST /api/v1/category-groups/` — configurable NightCap sections
 - `GET /api/v1/category-groups/for-ritual/` — ordered groups + categories for the nightly UI

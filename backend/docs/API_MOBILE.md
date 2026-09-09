@@ -8,10 +8,22 @@ All mobile endpoints live under `/api/v1/` and require `Authorization: Bearer <a
 
 ## Auth
 
-1. `POST /api/v1/auth/register/` — `{ username, email, password }` → `{ user, access, refresh }` and seeds default ritual categories.
+1. `POST /api/v1/auth/register/` — `{ username, email, password, invite_code? }` → `{ user, access, refresh }` and seeds default ritual categories. `user` includes `onboarding_completed`, `tracking_mode`, and `partnership`.
 2. `POST /api/v1/auth/token/` — `{ email or username, password }` → `{ access, refresh }`.
 3. `POST /api/v1/auth/token/refresh/` — `{ refresh }` → new `access`.
 4. `GET/PATCH /api/v1/auth/me/` and `/api/v1/auth/profile/`.
+
+## Couple space & onboarding
+
+NightCap is couple habit tracking with personal goals.
+
+- `GET/POST /api/v1/partnership/` — current couple space (`invite_code`, members) or create one
+- `POST /api/v1/partnership/invite/` — `{ email? }` share code; emails if provided
+- `POST /api/v1/partnership/join/` — `{ invite_code }` copies shared goals onto the joining account
+- `GET /api/v1/onboarding/templates/?mode=solo|couple` — spend / workout / habit starters (`Together` vs `Just me` via `suggested_scope`)
+- `POST /api/v1/onboarding/setup/` — `{ mode, templates: [{ slug, scope?, target_value? }], invite_email? }` creates the couple space if needed, applies goals, marks onboarding complete
+
+Goals have `scope`: `personal` | `shared`. Shared progress sums both partners’ matching categories.
 
 Prefer category/entry/goal/NightCap **`uuid`** fields in the mobile client. Integer `id` remains for back-compat.
 

@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .onboarding_views import (
     OnboardingApplyView,
     OnboardingCompleteView,
+    OnboardingSetupView,
     OnboardingStatusView,
     OnboardingTemplateListView,
 )
@@ -15,6 +16,7 @@ router.register("goals", GoalViewSet, basename="goal")
 urlpatterns = [
     path("onboarding/templates/", OnboardingTemplateListView.as_view(), name="onboarding-templates"),
     path("onboarding/apply/", OnboardingApplyView.as_view(), name="onboarding-apply"),
+    path("onboarding/setup/", OnboardingSetupView.as_view(), name="onboarding-setup"),
     path("onboarding/status/", OnboardingStatusView.as_view(), name="onboarding-status"),
     path("onboarding/complete/", OnboardingCompleteView.as_view(), name="onboarding-complete"),
 ]

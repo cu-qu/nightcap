@@ -49,6 +49,7 @@ class GroupGoalItemSerializer(serializers.Serializer):
     period_start = serializers.DateField()
     period_end = serializers.DateField()
     warn_at_percent = serializers.IntegerField()
+    scope = serializers.ChoiceField(choices=["personal", "shared"], required=False)
     category = GroupGoalCategorySerializer()
     weekly_progress = WeeklyNativeProgressSerializer(required=False, allow_null=True)
 
@@ -191,6 +192,7 @@ class GoalSerializer(serializers.ModelSerializer):
     category_uuid = serializers.UUIDField(write_only=True, required=False)
     category_detail = GoalCategorySummarySerializer(source="category", read_only=True)
     progress = serializers.SerializerMethodField()
+    partnership_uuid = serializers.UUIDField(source="partnership.uuid", read_only=True, allow_null=True)
 
     class Meta:
         model = Goal
@@ -206,6 +208,10 @@ class GoalSerializer(serializers.ModelSerializer):
             "direction",
             "target_value",
             "warn_at_percent",
+            "scope",
+            "partnership",
+            "partnership_uuid",
+            "template_slug",
             "is_active",
             "progress",
             "created_at",
@@ -216,6 +222,8 @@ class GoalSerializer(serializers.ModelSerializer):
             "uuid",
             "display_name",
             "category_detail",
+            "partnership",
+            "partnership_uuid",
             "progress",
             "created_at",
             "updated_at",
@@ -284,6 +292,23 @@ class GoalSerializer(serializers.ModelSerializer):
 
         if self.instance is None:
             attrs.setdefault("period", Goal.PERIOD_MONTHLY)
+            attrs.setdefault("scope", Goal.SCOPE_PERSONAL)
+
+        scope = attrs.get("scope") or getattr(self.instance, "scope", Goal.SCOPE_PERSONAL)
+        if scope == Goal.SCOPE_SHARED:
+            from accounts.partnerships import get_user_partnership
+
+            user = request.user if request is not None else getattr(self.instance, "user", None)
+            partnership = get_user_partnership(user) if user is not None else None
+            if partnership is None:
+                raise serializers.ValidationError(
+                    {
+                        "scope": "Invite your partner first to share a goal."
+                    }
+                )
+            attrs["partnership"] = partnership
+        elif "scope" in attrs:
+            attrs["partnership"] = None
 
         # One active goal per category (weekly OR monthly, not both).
         if (
@@ -309,3 +334,36 @@ class GoalSerializer(serializers.ModelSerializer):
                 )
 
         return attrs
+
+    def create(self, validated_data):
+        self._apply_scope_partnership(validated_data)
+        goal = super().create(validated_data)
+        if goal.scope == Goal.SCOPE_SHARED:
+            from goals.onboarding_services import mirror_shared_goal
+
+            mirror_shared_goal(goal)
+        return goal
+
+    def update(self, instance, validated_data):
+        self._apply_scope_partnership(validated_data)
+        goal = super().update(instance, validated_data)
+        if goal.scope == Goal.SCOPE_SHARED:
+            from goals.onboarding_services import mirror_shared_goal
+
+            mirror_shared_goal(goal)
+        return goal
+
+    def _apply_scope_partnership(self, validated_data):
+        from accounts.partnerships import get_user_partnership
+
+        request = self.context.get("request")
+        user = validated_data.get("user") or getattr(self.instance, "user", None)
+        if user is None and request is not None:
+            user = request.user
+        scope = validated_data.get("scope")
+        if scope is None and self.instance is not None:
+            scope = self.instance.scope
+        if scope == Goal.SCOPE_SHARED and user is not None:
+            validated_data["partnership"] = get_user_partnership(user)
+        elif scope == Goal.SCOPE_PERSONAL:
+            validated_data["partnership"] = None

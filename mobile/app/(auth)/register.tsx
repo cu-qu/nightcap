@@ -24,6 +24,8 @@ export default function RegisterScreen() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [showInvite, setShowInvite] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -31,7 +33,12 @@ export default function RegisterScreen() {
     setError(null);
     setLoading(true);
     try {
-      await register(username.trim(), email.trim(), password);
+      await register(
+        username.trim(),
+        email.trim(),
+        password,
+        inviteCode.trim() || undefined
+      );
       await loadCategories();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not register");
@@ -52,7 +59,7 @@ export default function RegisterScreen() {
         >
           <Text style={styles.brand}>Join NightCap</Text>
           <Text style={styles.subtitle}>
-            We seed your spend and habit chips on signup.
+            Couple habit tracking. Invite your partner in the next step — or paste a code now.
           </Text>
 
           <Text style={styles.label}>Username</Text>
@@ -86,6 +93,30 @@ export default function RegisterScreen() {
             placeholderTextColor={colors.muted}
             style={[styles.input, styles.inputLast]}
           />
+
+          <Pressable
+            onPress={() => setShowInvite((v) => !v)}
+            hitSlop={8}
+            style={styles.inviteToggle}
+          >
+            <Text style={styles.footerLink}>
+              {showInvite ? "Hide invite code" : "I have an invite code"}
+            </Text>
+          </Pressable>
+          {showInvite ? (
+            <>
+              <Text style={styles.label}>Invite code</Text>
+              <TextInput
+                autoCapitalize="characters"
+                autoCorrect={false}
+                value={inviteCode}
+                onChangeText={setInviteCode}
+                placeholder="ABC123"
+                placeholderTextColor={colors.muted}
+                style={[styles.input, styles.inputLast]}
+              />
+            </>
+          ) : null}
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -163,5 +194,9 @@ const styles = StyleSheet.create({
   footerLink: {
     fontWeight: "600",
     color: colors.accentSoft,
+  },
+  inviteToggle: {
+    marginBottom: 16,
+    alignSelf: "flex-start",
   },
 });

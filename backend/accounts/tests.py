@@ -167,3 +167,22 @@ class TransactionalMailTests(TestCase):
         PasswordResetEmail(user, "dXNlcg", "reset-token-xyz").send()
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("reset-token-xyz", mail.outbox[0].body)
+
+
+class TokenSlashTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        User.objects.create_user(
+            username="slashuser",
+            email="slash@example.com",
+            password="testpass123",
+        )
+
+    def test_token_post_without_trailing_slash_does_not_500(self):
+        resp = self.client.post(
+            "/api/v1/auth/token",
+            {"username": "slashuser", "password": "testpass123"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("access", resp.json())

@@ -98,3 +98,25 @@ class PasswordResetEmail:
             tags=["password-reset"],
         )
 
+
+@dataclass
+class PartnerInviteEmail:
+    """Invite a partner to share NightCap goals."""
+
+    to_email: str
+    inviter_name: str
+    invite_code: str
+
+    def send(self) -> None:
+        send_transactional_mail(
+            subject=f"{self.inviter_name} invited you to NightCap",
+            text_template="emails/partner_invite.txt",
+            html_template="emails/partner_invite.html",
+            context={
+                "inviter_name": self.inviter_name,
+                "invite_code": self.invite_code,
+            },
+            to_email=self.to_email,
+            tags=["partner-invite"],
+        )
+

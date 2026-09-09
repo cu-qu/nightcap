@@ -11,6 +11,21 @@ export function getApiBaseUrl(): string {
   return (process.env.EXPO_PUBLIC_API_URL || DEFAULT_BASE).replace(/\/$/, "");
 }
 
+function withApiTrailingSlash(path: string): string {
+  if (path.startsWith("http")) {
+    const url = new URL(path);
+    if (!url.pathname.endsWith("/")) {
+      url.pathname += "/";
+    }
+    return url.toString();
+  }
+  const q = path.indexOf("?");
+  const pathname = q === -1 ? path : path.slice(0, q);
+  const query = q === -1 ? "" : path.slice(q);
+  if (pathname.endsWith("/")) return path;
+  return `${pathname}/${query}`;
+}
+
 export class ApiError extends Error {
   status: number;
   body: unknown;
@@ -93,7 +108,9 @@ export async function apiRequest<T>(
   options: RequestOptions = {}
 ): Promise<T> {
   const { method = "GET", body, auth = true, headers = {} } = options;
-  const url = path.startsWith("http") ? path : `${getApiBaseUrl()}${path}`;
+  const url = path.startsWith("http")
+    ? withApiTrailingSlash(path)
+    : `${getApiBaseUrl()}${withApiTrailingSlash(path)}`;
 
   const buildHeaders = async (): Promise<Record<string, string>> => {
     const next: Record<string, string> = {

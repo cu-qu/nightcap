@@ -150,13 +150,7 @@ def scale_weekly_goal_to_month(
         weeks_in_month = 1
     base_target = goal.target_value
     month_target = base_target * weeks_in_month
-    current_value = aggregate_entries(
-        goal.user,
-        goal.category,
-        month_start,
-        month_end,
-        goal.category.metric_kind,
-    )
+    current_value = aggregate_goal_entries(goal, month_start, month_end)
     progress = build_progress(
         goal=goal,
         period_start=month_start,
@@ -183,6 +177,28 @@ def aggregate_entries(user, category, start: date, end: date, metric_kind: str) 
     return Decimal(total or 0)
 
 
+def partner_categories_for_goal(goal: Goal) -> list[tuple]:
+    """Categories that roll into this goal (both partners when shared)."""
+    if goal.scope != Goal.SCOPE_SHARED or not goal.partnership_id:
+        return [(goal.user, goal.category)]
+    user_ids = list(goal.partnership.members.values_list("user_id", flat=True))
+    categories = TrackingCategory.objects.filter(
+        user_id__in=user_ids,
+        name=goal.category.name,
+        type=goal.category.type,
+    ).select_related("user")
+    pairs = [(category.user, category) for category in categories]
+    return pairs or [(goal.user, goal.category)]
+
+
+def aggregate_goal_entries(goal: Goal, start: date, end: date) -> Decimal:
+    total = Decimal("0")
+    metric = goal.category.metric_kind
+    for user, category in partner_categories_for_goal(goal):
+        total += aggregate_entries(user, category, start, end, metric)
+    return total
+
+
 def _compute_status(direction: str, percent_used: float, warn_at_percent: int) -> str:
     if direction == Goal.DIRECTION_MAX:
         if percent_used >= 100:
@@ -200,13 +216,7 @@ def _compute_status(direction: str, percent_used: float, warn_at_percent: int) -
 def compute_goal_progress(goal: Goal, reference_date: date | None = None) -> GoalProgress:
     reference_date = reference_date or timezone.localdate()
     period_start, period_end = get_period_bounds(goal.period, reference_date)
-    current_value = aggregate_entries(
-        goal.user,
-        goal.category,
-        period_start,
-        period_end,
-        goal.category.metric_kind,
-    )
+    current_value = aggregate_goal_entries(goal, period_start, period_end)
     return build_progress(
         goal=goal,
         period_start=period_start,
@@ -509,6 +519,7 @@ def compute_group_goal_summary(
             "period_start": progress.period_start,
             "period_end": progress.period_end,
             "warn_at_percent": goal.warn_at_percent,
+            "scope": goal.scope,
             "category": {
                 "uuid": str(goal.category.uuid),
                 "name": goal.category.name,

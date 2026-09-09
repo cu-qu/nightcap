@@ -51,6 +51,9 @@ export function GoalHealthCard({ goal, onDelete }: Props) {
           <Text style={styles.name} numberOfLines={1}>
             {goal.display_name}
           </Text>
+          {goal.scope === "shared" ? (
+            <Text style={styles.together}>Together</Text>
+          ) : null}
           <Text style={styles.headline}>{goalHeadline(goal)}</Text>
         </View>
         <View style={[styles.pill, { backgroundColor: `${pill.color}33` }]}>
@@ -106,6 +109,14 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     color: colors.text,
+  },
+  together: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: colors.accentSoft,
   },
   headline: {
     marginTop: 4,

@@ -1,0 +1,43 @@
+{
+  "name": "NightCap",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  "forwardPorts": [8002, 8082],
+  "portsAttributes": {
+    "8002": {
+      "label": "Django API",
+      "onAutoForward": "notify"
+    },
+    "8082": {
+      "label": "Expo Metro",
+      "onAutoForward": "notify"
+    }
+  },
+  "initializeCommand": "sh -c 'test -f backend/.env || cp backend/.env.example backend/.env; test -f mobile/.env || cp mobile/.env.example mobile/.env'",
+  "postCreateCommand": "bash /workspace/.devcontainer/post-create.sh",
+  "postStartCommand": "bash /workspace/.devcontainer/post-start.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "charliermarsh.ruff",
+        "expo.vscode-expo-tools",
+        "dbaeumer.vscode-eslint"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.terminal.activateEnvironment": false,
+        "python.analysis.extraPaths": ["/workspace/backend"],
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "editor.formatOnSave": true
+        }
+      }
+    }
+  },
+  "remoteUser": "root"
+}

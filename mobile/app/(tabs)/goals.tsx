@@ -80,7 +80,8 @@ export default function GoalsScreen() {
         }
       >
         <Text style={styles.intro}>
-          Goals by category group — stay under, pass a count, or complete habits.
+          Stay under, pass a count, or complete habits. Shared goals count both
+          of you; personal ones stay just yours.
         </Text>
 
         <View style={styles.segment}>

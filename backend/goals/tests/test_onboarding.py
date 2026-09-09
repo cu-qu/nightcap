@@ -74,3 +74,5 @@ class OnboardingTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(resp.json()["onboarding_completed"])
         self.assertGreater(resp.json()["available_template_count"], 0)
+        self.assertEqual(resp.json()["tracking_mode"], "solo")
+        self.assertIsNone(resp.json()["partnership"])

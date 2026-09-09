@@ -5,6 +5,7 @@ export async function register(input: {
   username: string;
   email: string;
   password: string;
+  invite_code?: string;
 }): Promise<RegisterResponse> {
   return apiRequest<RegisterResponse>("/api/v1/auth/register/", {
     method: "POST",

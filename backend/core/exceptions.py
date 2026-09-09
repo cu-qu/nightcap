@@ -8,15 +8,15 @@ logger = logging.getLogger("django.request")
 
 def log_and_exception_handler(exc, context):
     """
-    DRF exception handler wrapper that logs full tracebacks to stdout/stderr
-    so platforms like Railway show the real cause of 500s.
+    DRF exception handler wrapper that logs full tracebacks for server errors.
+    Auth failures (401) are expected and must not look like crashes.
     """
-    request = context.get("request")
-    path = getattr(request, "path", None)
-    method = getattr(request, "method", None)
-
-    # Log stack trace; avoid logging headers/body to keep secrets out of logs.
-    logger.exception("Unhandled DRF exception", extra={"path": path, "method": method})
-
-    return exception_handler(exc, context)
+    response = exception_handler(exc, context)
+    status = getattr(response, "status_code", None)
+    if status is None or status >= 500:
+        request = context.get("request")
+        path = getattr(request, "path", None)
+        method = getattr(request, "method", None)
+        logger.exception("Unhandled DRF exception", extra={"path": path, "method": method})
+    return response
 

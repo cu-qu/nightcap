@@ -3,6 +3,7 @@ import { Text } from "react-native";
 
 import { useAuthStore } from "@/src/store/authStore";
 import { colors } from "@/src/theme/colors";
+import { needsOnboarding } from "@/src/utils/needsOnboarding";
 
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
   return (
@@ -13,9 +14,13 @@ function TabIcon({ label, focused }: { label: string; focused: boolean }) {
 export default function TabsLayout() {
   const hydrated = useAuthStore((s) => s.hydrated);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
 
   if (hydrated && !isAuthenticated) {
     return <Redirect href="/(auth)/login" />;
+  }
+  if (hydrated && isAuthenticated && needsOnboarding(user)) {
+    return <Redirect href="/(onboarding)" />;
   }
 
   return (

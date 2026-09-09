@@ -1,13 +1,18 @@
 import { Redirect, Stack } from "expo-router";
 
+import { needsOnboarding } from "@/src/utils/needsOnboarding";
 import { useAuthStore } from "@/src/store/authStore";
 import { colors } from "@/src/theme/colors";
 
 export default function AuthLayout() {
   const hydrated = useAuthStore((s) => s.hydrated);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
 
   if (hydrated && isAuthenticated) {
+    if (needsOnboarding(user)) {
+      return <Redirect href="/(onboarding)" />;
+    }
     return <Redirect href="/(tabs)" />;
   }
 

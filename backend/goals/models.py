@@ -41,6 +41,26 @@ class Goal(models.Model):
     direction = models.CharField(max_length=8, choices=DIRECTION_CHOICES, default=DIRECTION_MAX)
     target_value = models.DecimalField(max_digits=12, decimal_places=2)
     warn_at_percent = models.PositiveSmallIntegerField(default=80)
+    SCOPE_PERSONAL = "personal"
+    SCOPE_SHARED = "shared"
+    SCOPE_CHOICES = [
+        (SCOPE_PERSONAL, "Just me"),
+        (SCOPE_SHARED, "Together"),
+    ]
+    scope = models.CharField(
+        max_length=16,
+        choices=SCOPE_CHOICES,
+        default=SCOPE_PERSONAL,
+        db_index=True,
+    )
+    partnership = models.ForeignKey(
+        "accounts.Partnership",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="goals",
+    )
+    template_slug = models.SlugField(max_length=80, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -75,6 +95,18 @@ class GoalTemplate(models.Model):
         (GROUP_HABIT, "Habit"),
     ]
 
+    AUDIENCE_PERSONAL = "personal"
+    AUDIENCE_COUPLE = "couple"
+    AUDIENCE_BOTH = "both"
+    AUDIENCE_CHOICES = [
+        (AUDIENCE_PERSONAL, "Personal"),
+        (AUDIENCE_COUPLE, "Couple"),
+        (AUDIENCE_BOTH, "Both"),
+    ]
+
+    SCOPE_PERSONAL = Goal.SCOPE_PERSONAL
+    SCOPE_SHARED = Goal.SCOPE_SHARED
+
     slug = models.SlugField(max_length=80, unique=True)
     title = models.CharField(max_length=120)
     description = models.TextField(blank=True)
@@ -90,11 +122,29 @@ class GoalTemplate(models.Model):
         default=TrackingCategory.FINANCE_EXPENSE,
     )
     category_icon = models.CharField(max_length=64, blank=True)
+    category_emoji = models.CharField(max_length=16, blank=True)
+    category_group_key = models.SlugField(
+        max_length=64,
+        blank=True,
+        help_text="daily_spend or follow_up. Blank = infer from category type.",
+    )
     period = models.CharField(max_length=16, choices=Goal.PERIOD_CHOICES, default=Goal.PERIOD_MONTHLY)
     direction = models.CharField(max_length=8, choices=Goal.DIRECTION_CHOICES, default=Goal.DIRECTION_MAX)
     target_value = models.DecimalField(max_digits=12, decimal_places=2)
     warn_at_percent = models.PositiveSmallIntegerField(default=80)
     group = models.CharField(max_length=16, choices=GROUP_CHOICES, default=GROUP_FINANCE)
+    audience = models.CharField(
+        max_length=16,
+        choices=AUDIENCE_CHOICES,
+        default=AUDIENCE_BOTH,
+    )
+    suggested_scope = models.CharField(
+        max_length=16,
+        choices=Goal.SCOPE_CHOICES,
+        default=Goal.SCOPE_PERSONAL,
+    )
+    suggest_solo = models.BooleanField(default=False)
+    suggest_couple = models.BooleanField(default=False)
     sort_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

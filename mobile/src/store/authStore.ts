@@ -14,8 +14,10 @@ type AuthState = {
   register: (
     username: string,
     email: string,
-    password: string
+    password: string,
+    inviteCode?: string
   ) => Promise<void>;
+  refreshUser: () => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: User | null) => void;
 };
@@ -54,10 +56,20 @@ export const useAuthStore = create<AuthState>((set, get) => {
       set({ user, isAuthenticated: true, hydrated: true });
     },
 
-    register: async (username, email, password) => {
-      const data = await authApi.register({ username, email, password });
+    register: async (username, email, password, inviteCode) => {
+      const data = await authApi.register({
+        username,
+        email,
+        password,
+        ...(inviteCode ? { invite_code: inviteCode } : {}),
+      });
       await setTokens(data.access, data.refresh);
       set({ user: data.user, isAuthenticated: true, hydrated: true });
+    },
+
+    refreshUser: async () => {
+      const user = await authApi.fetchMe();
+      set({ user, isAuthenticated: true });
     },
 
     logout: async () => {

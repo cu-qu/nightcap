@@ -38,7 +38,7 @@ export function GoalHealthPill({ goal, onPress }: Props) {
       </Text>
       <View style={styles.body}>
         <Text style={styles.name} numberOfLines={1}>
-          {goal.display_name}
+          {goal.scope === "shared" ? `${goal.display_name} · 💛` : goal.display_name}
         </Text>
         <Text style={styles.meta} numberOfLines={1}>
           {modePillLabel(goal)} · {current}/{target}

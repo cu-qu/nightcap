@@ -55,11 +55,54 @@ export type RitualCategoryGroup = {
 };
 
 export type User = {
-  id: number;
+  id: number | string;
   username: string;
   email: string;
   email_verified?: boolean;
   preferred_language?: string;
+  onboarding_completed?: boolean;
+  tracking_mode?: "solo" | "couple";
+  partnership?: Partnership | null;
+};
+
+export type PartnershipMember = {
+  id: string;
+  username: string;
+  email: string;
+  role: "owner" | "partner";
+};
+
+export type Partnership = {
+  uuid: string;
+  invite_code: string;
+  is_full: boolean;
+  pending_email: string | null;
+  members: PartnershipMember[];
+};
+
+export type GoalScope = "personal" | "shared";
+
+export type GoalTemplateGroup = "finance" | "fitness" | "habit";
+
+export type GoalTemplate = {
+  slug: string;
+  title: string;
+  description: string;
+  example_entry_label: string;
+  category_name: string;
+  category_type: CategoryType;
+  category_icon: string;
+  category_emoji: string;
+  category_group_key: string;
+  period: "daily" | "weekly" | "monthly";
+  direction: "max" | "min";
+  target_value: string;
+  group: GoalTemplateGroup;
+  audience: "personal" | "couple" | "both";
+  suggested_scope: GoalScope;
+  suggest_solo: boolean;
+  suggest_couple: boolean;
+  sort_order: number;
 };
 
 export type AuthTokens = {

@@ -70,7 +70,10 @@ class MeView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer
 
     def get_object(self):
-        return self.request.user
+        return (
+            User.objects.select_related("profile", "partnership_membership__partnership")
+            .get(pk=self.request.user.pk)
+        )
 
 
 @extend_schema(

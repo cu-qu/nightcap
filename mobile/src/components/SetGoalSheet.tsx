@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import { PrimaryButton } from "@/src/components/PrimaryButton";
+import { useAuthStore } from "@/src/store/authStore";
 import { useGroupsStore } from "@/src/store/groupsStore";
 import { colors } from "@/src/theme/colors";
 import { categoryGlyph } from "@/src/theme/iconMap";
@@ -32,6 +33,7 @@ type Props = {
     target_value: string;
     period: GoalPeriod;
     direction: "max" | "min";
+    scope?: "personal" | "shared";
   }) => Promise<void>;
 };
 
@@ -44,10 +46,12 @@ export function SetGoalSheet({
 }: Props) {
   const ritualGroups = useGroupsStore((s) => s.ritualGroups);
   const ungrouped = useGroupsStore((s) => s.ungrouped);
+  const canShare = !!useAuthStore((s) => s.user?.partnership);
   const [period, setPeriod] = useState<GoalPeriod>(initialPeriod);
   const [intent, setIntent] = useState<GoalIntent>("stay_under");
   const [categoryUuid, setCategoryUuid] = useState<string | null>(null);
   const [target, setTarget] = useState("");
+  const [scope, setScope] = useState<"personal" | "shared">("personal");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +61,7 @@ export function SetGoalSheet({
     setIntent("stay_under");
     setCategoryUuid(null);
     setTarget("");
+    setScope("personal");
     setError(null);
   }, [visible, initialPeriod]);
 
@@ -109,6 +114,7 @@ export function SetGoalSheet({
         target_value: target.trim(),
         period,
         direction: directionForIntent(intent),
+        ...(canShare ? { scope } : {}),
       });
       onClose();
     } catch (e) {
@@ -230,6 +236,48 @@ export function SetGoalSheet({
               placeholderTextColor={colors.muted}
               style={styles.input}
             />
+
+            {canShare ? (
+              <>
+                <Text style={styles.label}>Who is this for?</Text>
+                <View style={styles.segment}>
+                  <Pressable
+                    onPress={() => setScope("shared")}
+                    style={[styles.segBtn, scope === "shared" && styles.segBtnOn]}
+                  >
+                    <Text
+                      style={[
+                        styles.segText,
+                        scope === "shared" && styles.segTextOn,
+                      ]}
+                    >
+                      Together
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setScope("personal")}
+                    style={[
+                      styles.segBtn,
+                      scope === "personal" && styles.segBtnOn,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.segText,
+                        scope === "personal" && styles.segTextOn,
+                      ]}
+                    >
+                      Just me
+                    </Text>
+                  </Pressable>
+                </View>
+                <Text style={styles.modeHint}>
+                  {scope === "shared"
+                    ? "Both of you log against the same target"
+                    : "Only your entries count"}
+                </Text>
+              </>
+            ) : null}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 

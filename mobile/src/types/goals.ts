@@ -63,6 +63,7 @@ export type GroupGoalItem = {
   percent_used: number;
   period_start: string;
   period_end: string;
+  scope?: "personal" | "shared";
   category: GroupGoalCategory;
 };
 
@@ -89,4 +90,5 @@ export type SetGoalInput = {
   target_value: string;
   period: GoalPeriod;
   direction?: "max" | "min";
+  scope?: "personal" | "shared";
 };

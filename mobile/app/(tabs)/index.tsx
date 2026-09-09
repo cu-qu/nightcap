@@ -14,6 +14,7 @@ import { GoalsSnapshot } from "@/src/components/GoalsSnapshot";
 import { MoonRiseTransition } from "@/src/components/MoonRiseTransition";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { cacheCalendar, loadCachedCalendar } from "@/src/db/schema";
+import { useAuthStore } from "@/src/store/authStore";
 import { useGoalsStore } from "@/src/store/goalsStore";
 import { useRitualDraftStore } from "@/src/store/ritualDraftStore";
 import { colors } from "@/src/theme/colors";
@@ -24,6 +25,7 @@ import {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
   const setDate = useRitualDraftStore((s) => s.setDate);
   const loadGoals = useGoalsStore((s) => s.load);
   const goalsPeriod = useGoalsStore((s) => s.period);
@@ -129,7 +131,11 @@ export default function HomeScreen() {
         }
       >
         <Text style={styles.brand}>NightCap</Text>
-        <Text style={styles.greeting}>How did the day go?</Text>
+        <Text style={styles.greeting}>
+          {user?.partnership?.members && user.partnership.members.length > 1
+            ? "How did the day go, you two?"
+            : "How did the day go?"}
+        </Text>
         <Text style={styles.today}>{formatFullDisplayDate(today)}</Text>
 
         <View style={styles.ritualCard}>

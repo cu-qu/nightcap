@@ -12,9 +12,10 @@ class GoalAdmin(admin.ModelAdmin):
         "period",
         "direction",
         "target_value",
+        "scope",
         "is_active",
     )
-    list_filter = ("period", "direction", "is_active")
+    list_filter = ("period", "direction", "scope", "is_active")
     search_fields = ("name", "user__username", "category__name")
 
 
@@ -24,6 +25,8 @@ class GoalTemplateAdmin(admin.ModelAdmin):
         "title",
         "slug",
         "group",
+        "audience",
+        "suggested_scope",
         "category_name",
         "period",
         "direction",
@@ -31,7 +34,7 @@ class GoalTemplateAdmin(admin.ModelAdmin):
         "is_active",
         "sort_order",
     )
-    list_filter = ("group", "period", "direction", "is_active")
+    list_filter = ("group", "audience", "suggested_scope", "period", "direction", "is_active")
     search_fields = ("title", "slug", "category_name", "description")
     prepopulated_fields = {"slug": ("title",)}
     ordering = ("group", "sort_order", "title")
