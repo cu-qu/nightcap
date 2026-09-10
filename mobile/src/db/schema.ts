@@ -1,6 +1,11 @@
 import * as SQLite from "expo-sqlite";
 
-import type { CalendarDay, Category, RitualRequest } from "@/src/types/api";
+import type {
+  CalendarDay,
+  Category,
+  CompletedWith,
+  RitualRequest,
+} from "@/src/types/api";
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -43,8 +48,15 @@ export type RitualDraftPersist = {
   spendValues: Record<string, string>;
   habitValues: Record<string, string>;
   booleanValues: Record<string, boolean>;
+  completedWith: Record<string, CompletedWith>;
   mood: string;
   reflection: string;
+  favoriteMoment: string;
+  favoritePhotoUri: string;
+  favoritePhotoName: string;
+  favoritePhotoType: string;
+  hasRemotePhoto: boolean;
+  photoCleared: boolean;
 };
 
 export async function cacheCategories(categories: Category[]) {
@@ -101,17 +113,22 @@ export async function loadCachedCalendar(
 export async function markCalendarDayOptimistic(
   date: string,
   hasReflection: boolean,
-  mood = ""
+  mood = "",
+  extras?: { favoriteMoment?: string; hasFavoritePhoto?: boolean }
 ) {
   const [y, m] = date.split("-").map(Number);
   const days = (await loadCachedCalendar(y, m)) ?? [];
   const existing = days.find((d) => d.date === date);
+  const favoriteMoment = extras?.favoriteMoment ?? "";
+  const hasFavoritePhoto = extras?.hasFavoritePhoto ?? false;
   if (existing) {
     existing.has_entries = true;
     existing.has_nightcap = true;
     existing.entry_count = Math.max(existing.entry_count, 1);
     if (hasReflection) existing.has_reflection = true;
     if (mood) existing.mood = mood;
+    if (favoriteMoment) existing.favorite_moment = favoriteMoment;
+    if (hasFavoritePhoto) existing.has_favorite_photo = true;
     if (!existing.groups) existing.groups = [];
   } else {
     days.push({
@@ -120,6 +137,8 @@ export async function markCalendarDayOptimistic(
       has_reflection: hasReflection,
       has_nightcap: true,
       mood,
+      favorite_moment: favoriteMoment,
+      has_favorite_photo: hasFavoritePhoto,
       entry_count: 1,
       expense_total: "0",
       habit_count: 0,
@@ -183,3 +202,7 @@ export async function markOutboxSynced(id: number) {
 }
 
 export type RitualOutboxPayload = RitualRequest;
+
+export type NightCapPhotoOutboxPayload =
+  | { date: string; localUri: string; name: string; type: string }
+  | { date: string; clear: true };

@@ -10,8 +10,8 @@ import {
 } from "react-native";
 
 import { PrimaryButton } from "@/src/components/PrimaryButton";
+import { EmojiPicker } from "@/src/components/EmojiPicker";
 import { colors } from "@/src/theme/colors";
-import { emojiOptions } from "@/src/theme/emojiOptions";
 import {
   GENERAL_UNIT_OPTIONS,
   unitOptionsForGroupKey,
@@ -29,6 +29,8 @@ type Props = {
   group: CategoryGroup | null;
   /** When group is null, user can pick a group or leave ungrouped */
   groups?: CategoryGroup[];
+  /** Pre-select a group when `group` is null (picker mode). */
+  initialGroupId?: number | null;
   loading?: boolean;
   onClose: () => void;
   onSubmit: (input: CategoryCreateInput) => Promise<void>;
@@ -38,6 +40,7 @@ export function AddCategoryModal({
   visible,
   group,
   groups = [],
+  initialGroupId = null,
   loading,
   onClose,
   onSubmit,
@@ -77,11 +80,24 @@ export function AddCategoryModal({
       const opts = unitOptionsForGroupKey(group.key);
       setUnitId(opts[0]?.id ?? "usd");
     } else {
-      // Bottom "Add category": default to No group with full units
-      setSelectedGroupId(NO_GROUP);
-      setUnitId(GENERAL_UNIT_OPTIONS[1]?.id ?? "minutes");
+      const startId =
+        initialGroupId != null && groups.some((g) => g.id === initialGroupId)
+          ? initialGroupId
+          : NO_GROUP;
+      setSelectedGroupId(startId);
+      const startGroup =
+        startId === NO_GROUP
+          ? null
+          : groups.find((g) => g.id === startId) ?? null;
+      if (startGroup) {
+        setEmoji(startGroup.key === SPEND_GROUP_KEY ? "🛒" : DEFAULT_EMOJI);
+        const opts = unitOptionsForGroupKey(startGroup.key);
+        setUnitId(opts[0]?.id ?? "usd");
+      } else {
+        setUnitId(GENERAL_UNIT_OPTIONS[1]?.id ?? "minutes");
+      }
     }
-  }, [visible, group]);
+  }, [visible, group, initialGroupId]);
 
   useEffect(() => {
     if (!units.some((u) => u.id === unitId)) {
@@ -196,31 +212,7 @@ export function AddCategoryModal({
 
             <View style={styles.block}>
               <Text style={styles.label}>Emoji</Text>
-              <Text style={styles.selectedEmojiPreview}>{emoji}</Text>
-              <ScrollView
-                style={styles.emojiScroller}
-                contentContainerStyle={styles.emojiWrap}
-                nestedScrollEnabled
-                showsVerticalScrollIndicator
-              >
-                {emojiOptions.map((opt) => {
-                  const selected = emoji === opt.emoji;
-                  return (
-                    <Pressable
-                      key={`${opt.emoji}-${opt.label}`}
-                      onPress={() => setEmoji(opt.emoji)}
-                      style={[styles.emojiChip, selected && styles.emojiChipOn]}
-                      accessibilityLabel={opt.label}
-                    >
-                      <Text style={styles.emoji}>{opt.emoji}</Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-              <Text style={styles.unitHint}>
-                Scroll for more. Saved on the category as{" "}
-                <Text style={{ fontWeight: "700" }}>emoji</Text>.
-              </Text>
+              <EmojiPicker value={emoji} onChange={setEmoji} />
             </View>
 
             <View style={styles.block}>
@@ -355,42 +347,6 @@ const styles = StyleSheet.create({
   },
   chipTextOn: {
     color: colors.accentSoft,
-  },
-  emojiWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingBottom: 4,
-  },
-  emojiScroller: {
-    maxHeight: 180,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.elevated,
-    padding: 10,
-  },
-  selectedEmojiPreview: {
-    marginBottom: 10,
-    fontSize: 36,
-    textAlign: "center",
-  },
-  emojiChip: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bg,
-  },
-  emojiChipOn: {
-    borderColor: colors.accent,
-    backgroundColor: "rgba(139, 92, 246, 0.25)",
-  },
-  emoji: {
-    fontSize: 22,
   },
   unitHint: {
     marginTop: 8,

@@ -20,7 +20,12 @@
       },
       "package": "com.nightcap.app",
       "predictiveBackGestureEnabled": false,
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -40,7 +45,22 @@
         }
       ],
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "NightCap uses your photos to save a favorite moment of the day.",
+          "cameraPermission": "NightCap uses the camera to capture a favorite moment of the day."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#8B5CF6",
+          "defaultChannel": "nightcap-reminders"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

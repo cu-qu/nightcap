@@ -1,8 +1,42 @@
-import { apiRequest } from "@/src/api/client";
+import { apiRequest, getApiBaseUrl } from "@/src/api/client";
 import type { NightCap } from "@/src/types/api";
 
 export async function getNightCap(date: string): Promise<NightCap> {
   return apiRequest<NightCap>(`/api/v1/nightcaps/${date}/`);
+}
+
+export function nightCapPhotoPath(date: string): string {
+  return `/api/v1/nightcaps/${date}/photo/`;
+}
+
+export function nightCapPhotoUrl(date: string, cacheKey?: string): string {
+  const path = nightCapPhotoPath(date);
+  const url = `${getApiBaseUrl()}${path}`;
+  if (!cacheKey) return url;
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}t=${encodeURIComponent(cacheKey)}`;
+}
+
+export async function uploadNightCapPhoto(
+  date: string,
+  file: { uri: string; name: string; type: string }
+): Promise<NightCap> {
+  const form = new FormData();
+  form.append("photo", {
+    uri: file.uri,
+    name: file.name,
+    type: file.type,
+  } as unknown as Blob);
+  return apiRequest<NightCap>(nightCapPhotoPath(date), {
+    method: "POST",
+    body: form,
+  });
+}
+
+export async function deleteNightCapPhoto(date: string): Promise<NightCap> {
+  return apiRequest<NightCap>(nightCapPhotoPath(date), {
+    method: "DELETE",
+  });
 }
 
 export async function listNightCaps(params?: {
@@ -20,7 +54,9 @@ export async function listNightCaps(params?: {
 }
 
 export async function upsertNightCap(
-  body: Partial<Pick<NightCap, "date" | "reflection" | "mood" | "status">> & {
+  body: Partial<
+    Pick<NightCap, "date" | "reflection" | "favorite_moment" | "mood" | "status">
+  > & {
     date: string;
   }
 ): Promise<NightCap> {
@@ -32,7 +68,7 @@ export async function upsertNightCap(
 
 export async function patchNightCap(
   date: string,
-  body: Partial<Pick<NightCap, "reflection" | "mood" | "status">>
+  body: Partial<Pick<NightCap, "reflection" | "favorite_moment" | "mood" | "status">>
 ): Promise<NightCap> {
   return apiRequest<NightCap>(`/api/v1/nightcaps/${date}/`, {
     method: "PATCH",

@@ -123,6 +123,11 @@ class GoalTemplate(models.Model):
     )
     category_icon = models.CharField(max_length=64, blank=True)
     category_emoji = models.CharField(max_length=16, blank=True)
+    category_unit = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text="minutes, miles, sessions, reps. Blank = default for the category type.",
+    )
     category_group_key = models.SlugField(
         max_length=64,
         blank=True,

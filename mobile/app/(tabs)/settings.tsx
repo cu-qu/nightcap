@@ -1,10 +1,13 @@
 import { useCallback, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
+  Linking,
+  Platform,
   Pressable,
   ScrollView,
   Share,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -13,7 +16,10 @@ import {
 import { getApiBaseUrl } from "@/src/api/client";
 import { ensurePartnership, invitePartner } from "@/src/api/partnership";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
+import { ReminderTimePicker } from "@/src/components/ReminderTimePicker";
+import { formatReminderTime, remindersSupported } from "@/src/notifications/reminders";
 import { useAuthStore } from "@/src/store/authStore";
+import { useReminderStore } from "@/src/store/reminderStore";
 import { colors } from "@/src/theme/colors";
 
 export default function SettingsScreen() {
@@ -27,12 +33,46 @@ export default function SettingsScreen() {
   const [email, setEmail] = useState("");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
+  const [reminderBusy, setReminderBusy] = useState(false);
+  const [reminderMessage, setReminderMessage] = useState<string | null>(null);
+
+  const reminderEnabled = useReminderStore((s) => s.enabled);
+  const reminderHour = useReminderStore((s) => s.hour);
+  const reminderMinute = useReminderStore((s) => s.minute);
+  const enableReminders = useReminderStore((s) => s.enable);
+  const disableReminders = useReminderStore((s) => s.disable);
+  const setReminderTime = useReminderStore((s) => s.setTime);
 
   useFocusEffect(
     useCallback(() => {
       void refreshUser();
     }, [refreshUser])
   );
+
+  async function onToggleReminder(value: boolean) {
+    setReminderBusy(true);
+    setReminderMessage(null);
+    try {
+      if (value) {
+        const ok = await enableReminders(reminderHour, reminderMinute);
+        if (!ok) {
+          setReminderMessage(
+            remindersSupported()
+              ? "Notifications are off for NightCap. Enable them in system Settings."
+              : "Reminders are available on the iPhone and Android apps."
+          );
+        }
+      } else {
+        await disableReminders();
+      }
+    } catch (e) {
+      setReminderMessage(
+        e instanceof Error ? e.message : "Could not update reminder"
+      );
+    } finally {
+      setReminderBusy(false);
+    }
+  }
 
   async function onCreateCouple() {
     setInviteBusy(true);
@@ -85,6 +125,47 @@ export default function SettingsScreen() {
         <Text style={styles.muted}>Signed in as</Text>
         <Text style={styles.username}>{user?.username ?? "—"}</Text>
         <Text style={styles.api}>API: {getApiBaseUrl()}</Text>
+
+        <View style={styles.reminderCard}>
+          <View style={styles.reminderHeader}>
+            <View style={styles.flex}>
+              <Text style={styles.partnerEyebrow}>Nightly reminder</Text>
+              <Text style={styles.reminderTitle}>
+                {reminderEnabled
+                  ? `Every day at ${formatReminderTime(reminderHour, reminderMinute)}`
+                  : "Off"}
+              </Text>
+              <Text style={styles.partnerSub}>
+                A nudge to close out spend, habits, and a good note.
+              </Text>
+            </View>
+            <Switch
+              value={reminderEnabled}
+              onValueChange={(value) => void onToggleReminder(value)}
+              disabled={reminderBusy}
+              trackColor={{ false: colors.elevated, true: colors.accent }}
+              thumbColor={colors.text}
+              ios_backgroundColor={colors.elevated}
+            />
+          </View>
+          <ReminderTimePicker
+            hour={reminderHour}
+            minute={reminderMinute}
+            onChange={(hour, minute) => {
+              void setReminderTime(hour, minute);
+            }}
+          />
+          {reminderMessage ? (
+            <Text style={styles.inviteMessage}>{reminderMessage}</Text>
+          ) : null}
+          {reminderMessage && remindersSupported() && Platform.OS !== "web" ? (
+            <PrimaryButton
+              title="Open system Settings"
+              variant="secondary"
+              onPress={() => void Linking.openSettings()}
+            />
+          ) : null}
+        </View>
 
         <View style={styles.partnerCard}>
           <Text style={styles.partnerEyebrow}>Your person</Text>
@@ -207,6 +288,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.elevated,
     padding: 16,
     gap: 10,
+  },
+  reminderCard: {
+    marginBottom: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 16,
+    gap: 12,
+  },
+  reminderHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  reminderTitle: {
+    marginTop: 6,
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.text,
   },
   partnerEyebrow: {
     fontSize: 12,

@@ -1,7 +1,19 @@
 import uuid
+from pathlib import Path
 
 from django.conf import settings
+from django.core.validators import FileExtensionValidator
 from django.db import models
+
+PHOTO_MAX_BYTES = 8 * 1024 * 1024
+PHOTO_EXTENSIONS = ("jpg", "jpeg", "png", "webp")
+
+
+def nightcap_photo_upload_to(instance, filename: str) -> str:
+    ext = Path(filename).suffix.lower()
+    if ext.lstrip(".") not in PHOTO_EXTENSIONS:
+        ext = ".jpg"
+    return f"nightcaps/{instance.user_id}/{instance.date}/{uuid.uuid4().hex}{ext}"
 
 
 class NightCap(models.Model):
@@ -38,6 +50,17 @@ class NightCap(models.Model):
     )
     date = models.DateField(db_index=True)
     reflection = models.TextField(blank=True)
+    favorite_moment = models.TextField(
+        blank=True,
+        help_text="Favorite text moment of the day.",
+    )
+    favorite_photo = models.ImageField(
+        upload_to=nightcap_photo_upload_to,
+        blank=True,
+        null=True,
+        validators=[FileExtensionValidator(PHOTO_EXTENSIONS)],
+        help_text="Favorite photo of the day.",
+    )
     mood = models.CharField(
         max_length=32,
         blank=True,
@@ -64,8 +87,39 @@ class NightCap(models.Model):
     def __str__(self):
         return f"NightCap {self.user_id} {self.date} ({self.status})"
 
+    @property
+    def has_favorite_photo(self) -> bool:
+        return bool(self.favorite_photo)
+
+    def set_favorite_photo(self, uploaded_file) -> None:
+        if self.favorite_photo:
+            self.favorite_photo.delete(save=False)
+        self.favorite_photo = uploaded_file
+        self.save(update_fields=["favorite_photo", "updated_at"])
+
+    def clear_favorite_photo(self) -> None:
+        if not self.favorite_photo:
+            return
+        self.favorite_photo.delete(save=False)
+        self.favorite_photo = None
+        self.save(update_fields=["favorite_photo", "updated_at"])
+
+    def delete(self, using=None, keep_parents=False):
+        photo = self.favorite_photo
+        result = super().delete(using=using, keep_parents=keep_parents)
+        if photo:
+            photo.delete(save=False)
+        return result
+
 
 class Entry(models.Model):
+    COMPLETED_ALONE = "alone"
+    COMPLETED_WITH_PARTNER = "with_partner"
+    COMPLETED_WITH_CHOICES = [
+        (COMPLETED_ALONE, "Alone"),
+        (COMPLETED_WITH_PARTNER, "With Partner"),
+    ]
+
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -90,6 +144,12 @@ class Entry(models.Model):
     quantity = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     value = models.CharField(max_length=255, blank=True)
     notes = models.TextField(blank=True)
+    completed_with = models.CharField(
+        max_length=16,
+        choices=COMPLETED_WITH_CHOICES,
+        default=COMPLETED_ALONE,
+        help_text="Whether this category was completed alone or with a partner.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

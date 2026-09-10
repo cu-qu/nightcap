@@ -1,11 +1,13 @@
 from decimal import Decimal
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from categories.models import TrackingCategory
 from categories.serializers import TrackingCategorySerializer
 
-from .models import DayReflection, Entry, NightCap
+from .models import PHOTO_MAX_BYTES, DayReflection, Entry, NightCap
 
 
 def validate_entry_metric_fields(category, amount, quantity):
@@ -52,6 +54,7 @@ class EntrySerializer(serializers.ModelSerializer):
             "label",
             "amount",
             "quantity",
+            "completed_with",
             "notes",
             "created_at",
             "updated_at",
@@ -81,6 +84,8 @@ class EntrySerializer(serializers.ModelSerializer):
         amount = attrs.get("amount", getattr(self.instance, "amount", None))
         quantity = attrs.get("quantity", getattr(self.instance, "quantity", None))
         attrs.update(validate_entry_metric_fields(category, amount, quantity))
+        if not category.uses_completed_with():
+            attrs["completed_with"] = Entry.COMPLETED_ALONE
         return attrs
 
 
@@ -139,9 +144,42 @@ class DayReflectionSerializer(serializers.ModelSerializer):
         read_only_fields = ("date", "created_at", "updated_at")
 
 
-class NightCapSerializer(serializers.ModelSerializer):
+def nightcap_photo_url(obj, request=None) -> str | None:
+    if not obj.favorite_photo:
+        return None
+    path = f"/api/v1/nightcaps/{obj.date.isoformat()}/photo/"
+    stamp = int(obj.updated_at.timestamp()) if obj.updated_at else 0
+    if stamp:
+        path = f"{path}?t={stamp}"
+    if request is not None:
+        return request.build_absolute_uri(path)
+    return path
+
+
+class NightCapPhotoSerializer(serializers.Serializer):
+    photo = serializers.ImageField()
+
+    def validate_photo(self, value):
+        if value.size and value.size > PHOTO_MAX_BYTES:
+            raise serializers.ValidationError("Photo must be 8 MB or smaller.")
+        return value
+
+
+class NightCapPhotoFieldsMixin:
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_has_favorite_photo(self, obj):
+        return bool(obj.favorite_photo)
+
+    @extend_schema_field(OpenApiTypes.URI)
+    def get_favorite_photo_url(self, obj):
+        return nightcap_photo_url(obj, self.context.get("request"))
+
+
+class NightCapSerializer(NightCapPhotoFieldsMixin, serializers.ModelSerializer):
     entries = EntrySerializer(many=True, read_only=True)
     entry_count = serializers.SerializerMethodField()
+    has_favorite_photo = serializers.SerializerMethodField()
+    favorite_photo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = NightCap
@@ -150,6 +188,9 @@ class NightCapSerializer(serializers.ModelSerializer):
             "uuid",
             "date",
             "reflection",
+            "favorite_moment",
+            "has_favorite_photo",
+            "favorite_photo_url",
             "mood",
             "status",
             "completed_at",
@@ -161,6 +202,8 @@ class NightCapSerializer(serializers.ModelSerializer):
         read_only_fields = (
             "id",
             "uuid",
+            "has_favorite_photo",
+            "favorite_photo_url",
             "completed_at",
             "entry_count",
             "entries",
@@ -168,14 +211,17 @@ class NightCapSerializer(serializers.ModelSerializer):
             "updated_at",
         )
 
+    @extend_schema_field(OpenApiTypes.INT)
     def get_entry_count(self, obj):
         if hasattr(obj, "_entry_count"):
             return obj._entry_count
         return obj.entries.count()
 
 
-class NightCapListSerializer(serializers.ModelSerializer):
+class NightCapListSerializer(NightCapPhotoFieldsMixin, serializers.ModelSerializer):
     entry_count = serializers.IntegerField(read_only=True, required=False)
+    has_favorite_photo = serializers.SerializerMethodField()
+    favorite_photo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = NightCap
@@ -184,6 +230,9 @@ class NightCapListSerializer(serializers.ModelSerializer):
             "uuid",
             "date",
             "reflection",
+            "favorite_moment",
+            "has_favorite_photo",
+            "favorite_photo_url",
             "mood",
             "status",
             "completed_at",
@@ -197,6 +246,7 @@ class NightCapListSerializer(serializers.ModelSerializer):
 class NightCapWriteSerializer(serializers.Serializer):
     date = serializers.DateField()
     reflection = serializers.CharField(required=False, allow_blank=True)
+    favorite_moment = serializers.CharField(required=False, allow_blank=True)
     mood = serializers.CharField(required=False, allow_blank=True, max_length=32)
     status = serializers.ChoiceField(
         choices=[NightCap.STATUS_DRAFT, NightCap.STATUS_COMPLETED],
@@ -214,6 +264,10 @@ class RitualItemSerializer(serializers.Serializer):
     )
     quantity = serializers.DecimalField(
         max_digits=12, decimal_places=2, required=False, allow_null=True
+    )
+    completed_with = serializers.ChoiceField(
+        choices=[Entry.COMPLETED_ALONE, Entry.COMPLETED_WITH_PARTNER],
+        required=False,
     )
 
     def validate(self, attrs):
@@ -249,18 +303,24 @@ class RitualItemSerializer(serializers.Serializer):
         attrs["category"] = category
         attrs["amount"] = metrics["amount"]
         attrs["quantity"] = metrics["quantity"]
+        if not category.uses_completed_with():
+            attrs["completed_with"] = Entry.COMPLETED_ALONE
         return attrs
 
 
 class RitualRequestSerializer(serializers.Serializer):
     date = serializers.DateField()
     reflection = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    favorite_moment = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
     mood = serializers.CharField(required=False, allow_blank=True, max_length=32)
     status = serializers.ChoiceField(
         choices=[NightCap.STATUS_DRAFT, NightCap.STATUS_COMPLETED],
         required=False,
         default=NightCap.STATUS_COMPLETED,
     )
+    replace_items = serializers.BooleanField(required=False, default=False)
     items = RitualItemSerializer(many=True, required=False)
 
     def validate(self, attrs):
@@ -274,6 +334,40 @@ class RitualResponseSerializer(serializers.Serializer):
     nightcap = NightCapListSerializer()
     entries = EntrySerializer(many=True)
     summary = serializers.DictField()
+
+
+class SharedRitualHintSerializer(serializers.Serializer):
+    category_uuid = serializers.UUIDField()
+    partner_username = serializers.CharField()
+    metric_kind = serializers.CharField()
+    unit = serializers.CharField(allow_blank=True)
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    quantity = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    completed_with = serializers.ChoiceField(
+        choices=[Entry.COMPLETED_ALONE, Entry.COMPLETED_WITH_PARTNER],
+        required=False,
+    )
+
+
+class SharedRitualResponseSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    partner_username = serializers.CharField(allow_null=True)
+    shared_category_uuids = serializers.ListField(child=serializers.UUIDField())
+    entries = SharedRitualHintSerializer(many=True)
+
+
+class CalendarCategorySummarySerializer(serializers.Serializer):
+    name = serializers.CharField()
+    emoji = serializers.CharField(allow_blank=True)
+    unit = serializers.CharField(allow_blank=True)
+    metric_kind = serializers.CharField()
+    type = serializers.CharField()
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    quantity = serializers.DecimalField(max_digits=12, decimal_places=2)
 
 
 class CalendarGroupSummarySerializer(serializers.Serializer):
@@ -294,6 +388,7 @@ class CalendarGroupSummarySerializer(serializers.Serializer):
     category_emojis = serializers.ListField(
         child=serializers.CharField(), allow_empty=True
     )
+    categories = CalendarCategorySummarySerializer(many=True, required=False)
 
 
 class CalendarDaySerializer(serializers.Serializer):
@@ -303,6 +398,8 @@ class CalendarDaySerializer(serializers.Serializer):
     has_nightcap = serializers.BooleanField()
     nightcap_status = serializers.CharField(allow_null=True, required=False)
     mood = serializers.CharField(allow_blank=True, required=False)
+    has_favorite_photo = serializers.BooleanField(required=False)
+    favorite_moment = serializers.CharField(allow_blank=True, required=False)
     entry_count = serializers.IntegerField()
     expense_total = serializers.DecimalField(max_digits=12, decimal_places=2)
     habit_count = serializers.IntegerField()
@@ -320,18 +417,70 @@ class CalendarQuerySerializer(serializers.Serializer):
     month = serializers.IntegerField(min_value=1, max_value=12, required=False)
 
 
+class ChartQuantityUnitSerializer(serializers.Serializer):
+    unit = serializers.CharField()
+    total = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+
 class ChartPointSerializer(serializers.Serializer):
     date = serializers.DateField(allow_null=True, required=False)
     week_start = serializers.DateField(allow_null=True, required=False)
     entry_count = serializers.IntegerField()
     expense_total = serializers.DecimalField(max_digits=12, decimal_places=2)
     income_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    together_count = serializers.IntegerField(required=False, default=0)
+    alone_count = serializers.IntegerField(required=False, default=0)
+    quantity_by_unit = ChartQuantityUnitSerializer(many=True, required=False)
+
+
+class ChartTogetherSerializer(serializers.Serializer):
+    together_count = serializers.IntegerField()
+    alone_count = serializers.IntegerField()
+
+
+class ChartCategorySerializer(serializers.Serializer):
+    category_id = serializers.IntegerField()
+    category__uuid = serializers.UUIDField()
+    category__name = serializers.CharField()
+    category__type = serializers.CharField()
+    uuid = serializers.CharField()
+    name = serializers.CharField()
+    emoji = serializers.CharField(allow_blank=True)
+    icon = serializers.CharField(allow_blank=True)
+    type = serializers.CharField()
+    metric_kind = serializers.CharField()
+    unit = serializers.CharField(allow_blank=True)
+    group_uuid = serializers.CharField(allow_null=True, required=False)
+    group_key = serializers.CharField(allow_null=True, allow_blank=True)
+    group_name = serializers.CharField(allow_null=True, required=False)
+    entry_count = serializers.IntegerField()
+    amount_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    quantity_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    together_count = serializers.IntegerField(required=False, default=0)
+    alone_count = serializers.IntegerField(required=False, default=0)
+
+
+class ChartGroupSerializer(serializers.Serializer):
+    uuid = serializers.UUIDField(allow_null=True)
+    key = serializers.CharField(allow_null=True, allow_blank=True)
+    name = serializers.CharField()
+    icon = serializers.CharField(allow_blank=True)
+    entry_count = serializers.IntegerField()
+    expense_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    amount_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    quantity_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    together_count = serializers.IntegerField()
+    alone_count = serializers.IntegerField()
+    category_emojis = serializers.ListField(
+        child=serializers.CharField(), allow_empty=True
+    )
 
 
 class ChartQuerySerializer(serializers.Serializer):
     period = serializers.ChoiceField(choices=["daily", "weekly"], default="daily")
     start_date = serializers.DateField(required=False)
     end_date = serializers.DateField(required=False)
+    group = serializers.CharField(required=False, allow_blank=True)
 
 
 class ChartResponseSerializer(serializers.Serializer):
@@ -339,4 +488,6 @@ class ChartResponseSerializer(serializers.Serializer):
     start_date = serializers.DateField()
     end_date = serializers.DateField()
     points = ChartPointSerializer(many=True)
-    by_category = serializers.ListField(child=serializers.DictField())
+    by_category = ChartCategorySerializer(many=True)
+    by_group = ChartGroupSerializer(many=True, required=False)
+    together = ChartTogetherSerializer(required=False)

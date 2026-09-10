@@ -2,31 +2,72 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { colors } from "@/src/theme/colors";
 import { categoryGlyph } from "@/src/theme/iconMap";
-import type { Category } from "@/src/types/api";
+import type {
+  Category,
+  CompletedWith,
+  SharedRitualHint,
+} from "@/src/types/api";
 import { sanitizeDecimalInput } from "@/src/utils/date";
 import {
   categoryInputPrefix,
   categoryInputSuffix,
+  categorySupportsCompletedWith,
+  formatPartnerRitualValue,
 } from "@/src/utils/ritualCategories";
 
 type Props = {
   category: Category;
   value: string | boolean;
   onChange: (value: string | boolean) => void;
+  together?: boolean;
+  partnerHint?: SharedRitualHint | null;
+  showCompletedWith?: boolean;
+  completedWith?: CompletedWith;
+  onCompletedWithChange?: (value: CompletedWith) => void;
 };
 
-export function RitualCategoryField({ category, value, onChange }: Props) {
+function hasLoggedValue(category: Category, value: string | boolean): boolean {
+  if (category.metric_kind === "boolean") return value === true;
+  if (typeof value !== "string") return false;
+  const n = Number(value.trim());
+  return value.trim().length > 0 && Number.isFinite(n) && n > 0;
+}
+
+export function RitualCategoryField({
+  category,
+  value,
+  onChange,
+  together = false,
+  partnerHint = null,
+  showCompletedWith = false,
+  completedWith = "alone",
+  onCompletedWithChange,
+}: Props) {
   const isBool = category.metric_kind === "boolean";
   const prefix = categoryInputPrefix(category);
   const suffix = categoryInputSuffix(category);
+  const partnerLine = partnerHint
+    ? formatPartnerRitualValue(partnerHint)
+    : null;
+  const showCompleted =
+    showCompletedWith &&
+    categorySupportsCompletedWith(category) &&
+    hasLoggedValue(category, value);
 
   return (
     <View style={styles.row}>
       <Text style={styles.emoji}>{categoryGlyph(category)}</Text>
       <View style={styles.body}>
-        <Text style={styles.name} numberOfLines={1}>
-          {category.name}
-        </Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.name} numberOfLines={1}>
+            {category.name}
+          </Text>
+          {together ? (
+            <View style={styles.togetherPill}>
+              <Text style={styles.togetherLabel}>Together</Text>
+            </View>
+          ) : null}
+        </View>
         {isBool ? (
           <View style={styles.boolRow}>
             <Pressable
@@ -70,6 +111,53 @@ export function RitualCategoryField({ category, value, onChange }: Props) {
             {suffix ? <Text style={styles.affixMuted}>{suffix}</Text> : null}
           </View>
         )}
+        {showCompleted ? (
+          <View style={styles.completedBlock}>
+            <Text style={styles.completedLabel}>Completed</Text>
+            <View style={styles.boolRow}>
+              <Pressable
+                onPress={() => onCompletedWithChange?.("with_partner")}
+                style={[
+                  styles.boolChip,
+                  completedWith === "with_partner" && styles.boolChipOn,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.boolLabel,
+                    completedWith === "with_partner" && styles.boolLabelOn,
+                  ]}
+                >
+                  With Partner
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => onCompletedWithChange?.("alone")}
+                style={[
+                  styles.boolChip,
+                  completedWith === "alone" && styles.boolChipOn,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.boolLabel,
+                    completedWith === "alone" && styles.boolLabelOn,
+                  ]}
+                >
+                  Alone
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+        {showCompleted && together ? (
+          <Text style={styles.partnerHint}>
+            If you both pick With Partner, this counts once.
+          </Text>
+        ) : null}
+        {partnerLine ? (
+          <Text style={styles.partnerHint}>{partnerLine}</Text>
+        ) : null}
       </View>
     </View>
   );
@@ -94,10 +182,32 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 8,
   },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   name: {
+    flex: 1,
+    flexShrink: 1,
     fontSize: 16,
     fontWeight: "600",
     color: colors.text,
+  },
+  togetherPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(139, 92, 246, 0.22)",
+  },
+  togetherLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.accentSoft,
+  },
+  partnerHint: {
+    fontSize: 13,
+    color: colors.muted,
   },
   inputRow: {
     flexDirection: "row",
@@ -152,5 +262,15 @@ const styles = StyleSheet.create({
   },
   boolLabelOn: {
     color: colors.accentSoft,
+  },
+  completedBlock: {
+    gap: 6,
+  },
+  completedLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: colors.muted,
   },
 });

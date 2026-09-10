@@ -9,6 +9,7 @@ from .views import (
     EntryViewSet,
     ExportView,
     NightCapViewSet,
+    RitualSharedView,
     RitualView,
 )
 
@@ -19,6 +20,7 @@ router.register("nightcaps", NightCapViewSet, basename="nightcap")
 urlpatterns = [
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
     path("export/", ExportView.as_view(), name="export"),
+    path("ritual/shared/", RitualSharedView.as_view(), name="ritual-shared"),
     path("ritual/", RitualView.as_view(), name="ritual"),
     path(
         "day-reflections/<str:reflection_date>/",

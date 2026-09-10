@@ -1,8 +1,11 @@
+import mimetypes
 from calendar import monthrange
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncDate
+from django.http import FileResponse
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
@@ -28,12 +31,14 @@ from .serializers import (
     DayReflectionSerializer,
     EntrySerializer,
     ExportResponseSerializer,
+    NightCapPhotoSerializer,
     NightCapListSerializer,
     NightCapSerializer,
     NightCapWriteSerializer,
     PeriodSummaryQuerySerializer,
     RitualRequestSerializer,
     RitualResponseSerializer,
+    SharedRitualResponseSerializer,
 )
 from .services import (
     build_daily_summary,
@@ -41,6 +46,7 @@ from .services import (
     chart_series,
     finance_totals,
     get_or_create_nightcap,
+    shared_ritual_hints,
     sync_day_reflection,
     upsert_ritual,
 )
@@ -294,20 +300,58 @@ class RitualView(APIView):
             ritual_date=data["date"],
             items=data.get("items") or [],
             reflection=data.get("reflection"),
+            favorite_moment=data.get("favorite_moment"),
             mood=data.get("mood"),
             status=data.get("status"),
+            replace_items=bool(data.get("replace_items")),
         )
         return Response(
             {
                 "date": result["date"],
                 "reflection": result["reflection"],
-                "nightcap": NightCapListSerializer(result["nightcap"]).data,
+                "nightcap": NightCapListSerializer(
+                    result["nightcap"], context={"request": request}
+                ).data,
                 "entries": EntrySerializer(
                     result["entries"], many=True, context={"request": request}
                 ).data,
                 "summary": result["summary"],
             }
         )
+
+
+@extend_schema(
+    tags=["Ritual"],
+    summary="Partner values on Together categories",
+    description=(
+        "For the given NightCap date, returns the other partner's logged values "
+        "on categories that have an active Together (shared) goal. Keyed to the "
+        "current user's category UUIDs so the ritual UI can display them without "
+        "overwriting local input."
+    ),
+    parameters=[
+        OpenApiParameter(
+            name="date",
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="NightCap date, defaults to today (YYYY-MM-DD).",
+        )
+    ],
+    responses={200: SharedRitualResponseSerializer},
+)
+class RitualSharedView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        query = DailySummaryQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        ritual_date = query.validated_data.get("date") or timezone.localdate()
+        payload = shared_ritual_hints(request.user, ritual_date)
+        serializer = SharedRitualResponseSerializer(
+            {"date": ritual_date, **payload}
+        )
+        return Response(serializer.data)
 
 
 @extend_schema_view(
@@ -365,6 +409,8 @@ class NightCapViewSet(viewsets.ModelViewSet):
         if "reflection" in data:
             nightcap.reflection = data["reflection"]
             sync_day_reflection(request.user, data["date"], data["reflection"])
+        if "favorite_moment" in data:
+            nightcap.favorite_moment = data.get("favorite_moment") or ""
         if "mood" in data:
             nightcap.mood = data.get("mood") or ""
         if data.get("status") == NightCap.STATUS_COMPLETED:
@@ -379,7 +425,7 @@ class NightCapViewSet(viewsets.ModelViewSet):
             entry_count=Count("entries")
         ).first()
         return Response(
-            NightCapListSerializer(nightcap).data, status=status.HTTP_201_CREATED
+            NightCapListSerializer(nightcap, context={"request": request}).data, status=status.HTTP_201_CREATED
         )
 
     def partial_update(self, request, *args, **kwargs):
@@ -390,6 +436,8 @@ class NightCapViewSet(viewsets.ModelViewSet):
         if reflection is not None:
             nightcap.reflection = reflection
             sync_day_reflection(request.user, nightcap.date, reflection)
+        if "favorite_moment" in request.data:
+            nightcap.favorite_moment = request.data.get("favorite_moment") or ""
         if "mood" in request.data:
             nightcap.mood = request.data.get("mood") or ""
         if nightcap_status == NightCap.STATUS_COMPLETED:
@@ -411,6 +459,64 @@ class NightCapViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
+
+    @extend_schema(
+        tags=["NightCaps"],
+        summary="Favorite photo of the day",
+        description=(
+            "GET streams the saved photo. POST multipart field `photo` uploads "
+            "or replaces it (JPEG/PNG/WebP, max 8 MB). DELETE removes it. "
+            "Photos are private to the signed-in user."
+        ),
+        request={"multipart/form-data": NightCapPhotoSerializer},
+        responses={200: NightCapSerializer, 204: None},
+    )
+    @action(detail=True, methods=["get", "post", "delete"], url_path="photo")
+    def photo(self, request, date=None):
+        nightcap_date = _parse_path_date(str(date))
+        if request.method == "GET":
+            nightcap = NightCap.objects.filter(
+                user=request.user, date=nightcap_date
+            ).first()
+            if nightcap is None or not nightcap.favorite_photo:
+                return Response(
+                    {"detail": "No photo for this day."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            photo = nightcap.favorite_photo
+            content_type = (
+                mimetypes.guess_type(photo.name)[0] or "image/jpeg"
+            )
+            return FileResponse(
+                photo.open("rb"),
+                as_attachment=False,
+                filename=Path(photo.name).name,
+                content_type=content_type,
+            )
+
+        nightcap = get_or_create_nightcap(request.user, nightcap_date)
+        if request.method == "DELETE":
+            nightcap.clear_favorite_photo()
+            nightcap = (
+                NightCap.objects.filter(pk=nightcap.pk)
+                .prefetch_related("entries__category")
+                .first()
+            )
+            return Response(
+                NightCapSerializer(nightcap, context={"request": request}).data
+            )
+
+        serializer = NightCapPhotoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        nightcap.set_favorite_photo(serializer.validated_data["photo"])
+        nightcap = (
+            NightCap.objects.filter(pk=nightcap.pk)
+            .prefetch_related("entries__category")
+            .first()
+        )
+        return Response(
+            NightCapSerializer(nightcap, context={"request": request}).data
+        )
 
 
 @extend_schema(
@@ -543,6 +649,13 @@ class CalendarView(APIView):
             location=OpenApiParameter.QUERY,
             required=False,
         ),
+        OpenApiParameter(
+            name="group",
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="Category group key or UUID to filter the series.",
+        ),
     ],
     responses={200: ChartResponseSerializer},
 )
@@ -558,5 +671,6 @@ class ChartsView(APIView):
             period=data.get("period") or "daily",
             start_date=data.get("start_date"),
             end_date=data.get("end_date"),
+            group=data.get("group") or None,
         )
         return Response(ChartResponseSerializer(payload).data)

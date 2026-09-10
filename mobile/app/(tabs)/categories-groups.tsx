@@ -7,19 +7,20 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
 } from "react-native";
 
 import { AddCategoryModal } from "@/src/components/AddCategoryModal";
+import { EmojiPicker } from "@/src/components/EmojiPicker";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { useGroupsStore } from "@/src/store/groupsStore";
 import { colors } from "@/src/theme/colors";
-import { categoryGlyph } from "@/src/theme/iconMap";
+import { categoryGlyph, iconFor } from "@/src/theme/iconMap";
 import type { Category, CategoryCreateInput, CategoryGroup } from "@/src/types/api";
 import { SPEND_GROUP_KEY } from "@/src/types/api";
+import { categoryKindLabel } from "@/src/utils/units";
 
 function slugKey(name: string): string {
   return name
@@ -52,6 +53,7 @@ export default function CategoriesGroupsScreen() {
   const [busy, setBusy] = useState(false);
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
   const [editName, setEditName] = useState("");
+  const [editEmoji, setEditEmoji] = useState("✨");
   const [addForGroup, setAddForGroup] = useState<CategoryGroup | null>(null);
   const [addFromBottom, setAddFromBottom] = useState(false);
 
@@ -66,7 +68,7 @@ export default function CategoriesGroupsScreen() {
     if (!name) return;
     const key = slugKey(name);
     if (!key) {
-      Alert.alert("Invalid name", "Enter a name that becomes a valid key.");
+      Alert.alert("Invalid name", "Enter a name with letters or numbers.");
       return;
     }
     setBusy(true);
@@ -168,11 +170,13 @@ export default function CategoriesGroupsScreen() {
   function openRenameGroup(group: CategoryGroup) {
     setEditTarget({ kind: "group", group });
     setEditName(group.name);
+    setEditEmoji(iconFor(group.icon));
   }
 
   function openEditCategory(cat: Category) {
     setEditTarget({ kind: "category", category: cat });
     setEditName(cat.name);
+    setEditEmoji(categoryGlyph(cat));
   }
 
   async function saveEdit() {
@@ -181,9 +185,12 @@ export default function CategoriesGroupsScreen() {
     setBusy(true);
     try {
       if (editTarget.kind === "group") {
-        await updateGroup(editTarget.group.id, { name });
+        await updateGroup(editTarget.group.id, { name, icon: editEmoji });
       } else {
-        await updateCategory(editTarget.category.id, { name });
+        await updateCategory(editTarget.category.id, {
+          name,
+          emoji: editEmoji,
+        });
       }
       setEditTarget(null);
     } catch (e) {
@@ -287,40 +294,22 @@ export default function CategoriesGroupsScreen() {
           return (
             <View key={group.uuid} style={styles.groupCard}>
               <View style={styles.groupHeader}>
-                <View style={styles.flex}>
+                <Pressable
+                  onPress={() => openRenameGroup(group)}
+                  style={styles.flex}
+                >
                   <Text style={styles.groupTitle}>
                     {categoryGlyph({ icon: group.icon })} {label}
                   </Text>
-                  <Text style={styles.groupMeta}>
-                    key={group.key}
-                    {group.is_default ? " · default" : ""}
-                    {" · "}
-                    order {group.sort_order}
-                  </Text>
-                </View>
-                <Switch
-                  value={group.show_in_ritual}
-                  onValueChange={(v) =>
-                    void updateGroup(group.id, { show_in_ritual: v }).catch(
-                      (e) =>
-                        Alert.alert(
-                          "Update failed",
-                          e instanceof Error ? e.message : "Try again"
-                        )
-                    )
-                  }
-                  trackColor={{ false: colors.border, true: colors.accent }}
-                  thumbColor="#fff"
-                />
+                </Pressable>
               </View>
-              <Text style={styles.switchHint}>Show in NightCap ritual</Text>
 
               <View style={styles.rowActions}>
                 <Pressable
                   onPress={() => openRenameGroup(group)}
                   style={styles.smallBtn}
                 >
-                  <Text style={styles.smallBtnText}>Rename</Text>
+                  <Text style={styles.smallBtnText}>Edit</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => void moveGroupOrder(group, -1)}
@@ -351,16 +340,19 @@ export default function CategoriesGroupsScreen() {
 
               {members.map((cat) => (
                 <View key={cat.uuid} style={styles.catRow}>
-                  <Text style={styles.emoji}>{categoryGlyph(cat)}</Text>
                   <Pressable
-                    style={styles.flex}
+                    style={styles.catMain}
                     onPress={() => openEditCategory(cat)}
                   >
-                    <Text style={styles.catName}>{cat.name}</Text>
-                    <Text style={styles.catMeta}>
-                      {cat.metric_kind}
-                      {cat.unit ? ` · ${cat.unit}` : ""}
-                    </Text>
+                    <Text style={styles.emoji}>{categoryGlyph(cat)}</Text>
+                    <View style={styles.flex}>
+                      <Text style={styles.catName}>{cat.name}</Text>
+                      {categoryKindLabel(cat) ? (
+                        <Text style={styles.catMeta}>
+                          {categoryKindLabel(cat)}
+                        </Text>
+                      ) : null}
+                    </View>
                   </Pressable>
                   <Pressable
                     onPress={() => moveCategory(cat)}
@@ -416,14 +408,20 @@ export default function CategoriesGroupsScreen() {
         </Text>
         {ungrouped.map((cat) => (
           <View key={cat.uuid} style={styles.catRow}>
-            <Text style={styles.emoji}>{categoryGlyph(cat)}</Text>
-            <View style={styles.flex}>
-              <Text style={styles.catName}>{cat.name}</Text>
-              <Text style={styles.catMeta}>
-                {cat.metric_kind}
-                {cat.unit ? ` · ${cat.unit}` : ""}
-              </Text>
-            </View>
+            <Pressable
+              style={styles.catMain}
+              onPress={() => openEditCategory(cat)}
+            >
+              <Text style={styles.emoji}>{categoryGlyph(cat)}</Text>
+              <View style={styles.flex}>
+                <Text style={styles.catName}>{cat.name}</Text>
+                {categoryKindLabel(cat) ? (
+                  <Text style={styles.catMeta}>
+                    {categoryKindLabel(cat)}
+                  </Text>
+                ) : null}
+              </View>
+            </Pressable>
             <Pressable
               onPress={() => addUngrouped(cat)}
               style={styles.smallBtn}
@@ -467,18 +465,26 @@ export default function CategoriesGroupsScreen() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
             <Text style={styles.modalTitle}>
               {editTarget?.kind === "group"
-                ? "Rename group"
+                ? "Edit group"
                 : "Edit category"}
             </Text>
+            <Text style={styles.modalLabel}>Name</Text>
             <TextInput
               value={editName}
               onChangeText={setEditName}
               style={styles.input}
               placeholderTextColor={colors.muted}
-              autoFocus
             />
+            <Text style={styles.modalLabel}>Emoji</Text>
+            <View style={styles.emojiPickerWrap}>
+              <EmojiPicker value={editEmoji} onChange={setEditEmoji} />
+            </View>
             <PrimaryButton
               title="Save"
               loading={busy}
@@ -491,6 +497,7 @@ export default function CategoriesGroupsScreen() {
             >
               <Text style={styles.smallBtnText}>Cancel</Text>
             </Pressable>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -528,23 +535,12 @@ const styles = StyleSheet.create({
   groupHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    marginBottom: 12,
   },
   groupTitle: {
     fontSize: 17,
     fontWeight: "700",
     color: colors.text,
-  },
-  groupMeta: {
-    marginTop: 4,
-    fontSize: 12,
-    color: colors.muted,
-  },
-  switchHint: {
-    marginTop: 6,
-    marginBottom: 10,
-    fontSize: 12,
-    color: colors.muted,
   },
   rowActions: {
     flexDirection: "row",
@@ -588,6 +584,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.elevated,
     paddingHorizontal: 10,
     paddingVertical: 10,
+    gap: 8,
+  },
+  catMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   emoji: {
@@ -656,6 +658,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   modalCard: {
+    maxHeight: "88%",
     borderRadius: 18,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -667,6 +670,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: colors.text,
+  },
+  modalLabel: {
+    marginBottom: 8,
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.muted,
+  },
+  emojiPickerWrap: {
+    marginBottom: 16,
   },
   modalCancel: {
     marginTop: 14,

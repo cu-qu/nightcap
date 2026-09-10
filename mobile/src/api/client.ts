@@ -111,13 +111,15 @@ export async function apiRequest<T>(
   const url = path.startsWith("http")
     ? withApiTrailingSlash(path)
     : `${getApiBaseUrl()}${withApiTrailingSlash(path)}`;
+  const isFormData =
+    typeof FormData !== "undefined" && body instanceof FormData;
 
   const buildHeaders = async (): Promise<Record<string, string>> => {
     const next: Record<string, string> = {
       Accept: "application/json",
       ...headers,
     };
-    if (body !== undefined) next["Content-Type"] = "application/json";
+    if (body !== undefined && !isFormData) next["Content-Type"] = "application/json";
     if (auth) {
       const access = await getAccessToken();
       if (access) next.Authorization = `Bearer ${access}`;
@@ -129,7 +131,12 @@ export async function apiRequest<T>(
     fetch(url, {
       method,
       headers: await buildHeaders(),
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body:
+        body === undefined
+          ? undefined
+          : isFormData
+            ? (body as FormData)
+            : JSON.stringify(body),
     });
 
   let res = await doFetch();

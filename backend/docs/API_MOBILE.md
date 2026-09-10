@@ -65,7 +65,15 @@ Filter with `?group_key=daily_spend`.
 - `POST /api/v1/nightcaps/` — upsert by `date` with optional `reflection` / `mood` / `status`
 - `GET/PATCH /api/v1/nightcaps/{YYYY-MM-DD}/` — detail includes linked `entries`
 
-Fields: `uuid`, `date`, `reflection`, `mood`, `status` (`draft` | `completed`), `completed_at`, `entries`.
+Fields: `uuid`, `date`, `reflection`, `favorite_moment`, `has_favorite_photo`, `favorite_photo_url`, `mood`, `status` (`draft` | `completed`), `completed_at`, `entries`.
+
+`favorite_moment` (optional) — a short text memory from the day.
+
+Favorite photo is stored on the NightCap `ImageField`. Upload separately (multipart), not in the JSON ritual body:
+
+- `GET /api/v1/nightcaps/{YYYY-MM-DD}/photo/` — authenticated image bytes (404 if none)
+- `POST /api/v1/nightcaps/{YYYY-MM-DD}/photo/` — multipart field `photo` (JPEG/PNG/WebP, max 8 MB)
+- `DELETE /api/v1/nightcaps/{YYYY-MM-DD}/photo/` — remove the saved photo
 
 `mood` (optional) — any short emoji/string (max 32 chars). Suggested presets:
 
@@ -115,6 +123,7 @@ Creates/updates the **NightCap** for that date, upserts entries, sets reflection
 {
   "date": "2026-07-13",
   "reflection": "Ended on a good note.",
+  "favorite_moment": "Sunset on the walk home.",
   "mood": "🙂",
   "status": "completed",
   "items": [
@@ -175,6 +184,8 @@ Each day includes NightCap mood plus a **groups** summary for category groups th
       "has_nightcap": true,
       "nightcap_status": "completed",
       "mood": "🙂",
+      "has_favorite_photo": true,
+      "favorite_moment": "Sunset on the walk home.",
       "entry_count": 4,
       "expense_total": "42.10",
       "habit_count": 2,

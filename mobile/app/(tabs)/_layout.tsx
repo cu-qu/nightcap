@@ -53,7 +53,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="graphs"
         options={{
-          title: "Graphs",
+          title: "Charts",
           tabBarIcon: ({ focused }) => <TabIcon label="📊" focused={focused} />,
         }}
       />

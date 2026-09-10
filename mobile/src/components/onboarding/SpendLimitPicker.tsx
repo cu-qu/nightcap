@@ -46,7 +46,7 @@ type Props = {
   templates: GoalTemplate[];
   selected: Record<string, GoalScope>;
   targets: Record<string, string>;
-  periods: Record<string, SpendPeriod>;
+  periods: Record<string, SpendPeriod | string>;
   locked: Set<string>;
   couple: boolean;
   onToggle: (template: GoalTemplate) => void;

@@ -32,7 +32,7 @@ class CategoryGroup(models.Model):
     name = models.CharField(max_length=120)
     key = models.SlugField(
         max_length=64,
-        help_text="Stable client key, e.g. daily_spend or follow_up.",
+        help_text="Stable client key, e.g. daily_spend or follow_up (Health group).",
     )
     sort_order = models.PositiveIntegerField(default=0)
     icon = models.CharField(max_length=64, blank=True)
@@ -136,15 +136,16 @@ class TrackingCategory(models.Model):
     def __str__(self):
         return self.name
 
+    def uses_completed_with(self) -> bool:
+        """With Partner / Alone applies to workouts and habits, not money."""
+        if self.metric_kind == self.METRIC_AMOUNT:
+            return False
+        if self.type in (self.FINANCE_EXPENSE, self.FINANCE_INCOME):
+            return False
+        return True
+
     def save(self, *args, **kwargs):
-        expected_kind, expected_unit = default_metric_for_type(self.type)
-        if not self.pk and self.metric_kind == TrackingCategory.METRIC_QUANTITY:
-            if self.type in (
-                TrackingCategory.FINANCE_EXPENSE,
-                TrackingCategory.FINANCE_INCOME,
-                TrackingCategory.HABIT,
-            ):
-                self.metric_kind = expected_kind
         if not self.unit:
+            _, expected_unit = default_metric_for_type(self.type)
             self.unit = expected_unit
         super().save(*args, **kwargs)

@@ -18,6 +18,8 @@ import {
   setupOnboarding,
 } from "@/src/api/onboarding";
 import { ensurePartnership, invitePartner } from "@/src/api/partnership";
+import { ReminderTimePicker } from "@/src/components/ReminderTimePicker";
+import { MovementPicker } from "@/src/components/onboarding/MovementPicker";
 import {
   SpendLimitPicker,
   convertSpendTarget,
@@ -26,17 +28,19 @@ import {
 } from "@/src/components/onboarding/SpendLimitPicker";
 import { TemplatePicker } from "@/src/components/onboarding/TemplatePicker";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
+import { formatReminderTime } from "@/src/notifications/reminders";
 import { useAuthStore } from "@/src/store/authStore";
 import { useCategoriesStore } from "@/src/store/categoriesStore";
 import { useGroupsStore } from "@/src/store/groupsStore";
+import { useReminderStore } from "@/src/store/reminderStore";
 import { colors } from "@/src/theme/colors";
 import type { GoalScope, GoalTemplate, GoalTemplateGroup } from "@/src/types/api";
 
 type Mode = "solo" | "couple";
-type Step = "mode" | "invite" | "finance" | "fitness" | "habit";
+type Step = "mode" | "invite" | "finance" | "fitness" | "habit" | "remind";
 
 const STEP_COPY: Record<
-  Exclude<Step, "mode" | "invite">,
+  Exclude<Step, "mode" | "invite" | "remind">,
   { title: string; body: string }
 > = {
   finance: {
@@ -45,7 +49,7 @@ const STEP_COPY: Record<
   },
   fitness: {
     title: "Movement",
-    body: "Workouts, walks, or whatever you’ll actually log tonight.",
+    body: "Pick running, biking, or workouts — then track 30 minutes, 5 miles, or sessions.",
   },
   habit: {
     title: "Other habits",
@@ -58,6 +62,10 @@ export default function OnboardingScreen() {
   const refreshUser = useAuthStore((s) => s.refreshUser);
   const loadCategories = useCategoriesStore((s) => s.load);
   const loadGroups = useGroupsStore((s) => s.load);
+  const reminderHour = useReminderStore((s) => s.hour);
+  const reminderMinute = useReminderStore((s) => s.minute);
+  const enableReminders = useReminderStore((s) => s.enable);
+  const saveReminderTime = useReminderStore((s) => s.setTime);
 
   const alreadyPaired = !!user?.partnership;
   const [step, setStep] = useState<Step>(alreadyPaired ? "finance" : "mode");
@@ -67,7 +75,7 @@ export default function OnboardingScreen() {
   const [templates, setTemplates] = useState<GoalTemplate[]>([]);
   const [selected, setSelected] = useState<Record<string, GoalScope>>({});
   const [targets, setTargets] = useState<Record<string, string>>({});
-  const [periods, setPeriods] = useState<Record<string, SpendPeriod>>({});
+  const [periods, setPeriods] = useState<Record<string, SpendPeriod | "daily">>({});
   const [locked, setLocked] = useState<Set<string>>(new Set());
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteCode, setInviteCode] = useState(user?.partnership?.invite_code ?? "");
@@ -114,7 +122,7 @@ export default function OnboardingScreen() {
         setSelected((prev) => {
           const next = { ...prev };
           const nextTargets: Record<string, string> = {};
-          const nextPeriods: Record<string, SpendPeriod> = {};
+          const nextPeriods: Record<string, SpendPeriod | "daily"> = {};
           for (const template of data.templates) {
             if (next[template.slug]) continue;
             const suggest = mode === "couple" ? template.suggest_couple : template.suggest_solo;
@@ -124,6 +132,10 @@ export default function OnboardingScreen() {
               nextTargets[template.slug] = formatTemplateTarget(template.target_value);
               if (template.group === "finance") {
                 nextPeriods[template.slug] = "monthly";
+              } else if (template.period === "daily") {
+                nextPeriods[template.slug] = "daily";
+              } else {
+                nextPeriods[template.slug] = "weekly";
               }
             }
           }
@@ -183,7 +195,13 @@ export default function OnboardingScreen() {
         }));
         setPeriods((p) => ({
           ...p,
-          [template.slug]: p[template.slug] ?? "monthly",
+          [template.slug]:
+            p[template.slug] ??
+            (template.group === "finance"
+              ? "monthly"
+              : template.period === "daily"
+                ? "daily"
+                : "weekly"),
         }));
       }
       return next;
@@ -194,9 +212,17 @@ export default function OnboardingScreen() {
     setSelected((prev) => ({ ...prev, [slug]: scope }));
   }
 
+  function setMovementPeriod(slug: string, period: "daily" | "weekly") {
+    setPeriods((prev) => ({ ...prev, [slug]: period }));
+  }
+
   function setSpendPeriod(slug: string, period: SpendPeriod) {
     const current = periods[slug] ?? "monthly";
     if (current === period) return;
+    if (current !== "weekly" && current !== "monthly") {
+      setPeriods((prev) => ({ ...prev, [slug]: period }));
+      return;
+    }
     setPeriods((prev) => ({ ...prev, [slug]: period }));
     setTargets((prev) => {
       const value = prev[slug];
@@ -256,6 +282,7 @@ export default function OnboardingScreen() {
     if (step === "finance") setStep(couple && !alreadyPaired ? "invite" : "mode");
     if (step === "fitness") setStep("finance");
     if (step === "habit") setStep("fitness");
+    if (step === "remind") setStep("habit");
   }
 
   function nextFrom(current: Step) {
@@ -270,11 +297,15 @@ export default function OnboardingScreen() {
     if (current === "invite") setStep("finance");
     if (current === "finance") setStep("fitness");
     if (current === "fitness") setStep("habit");
-    if (current === "habit") void finish();
+    if (current === "habit") setStep("remind");
+    if (current === "remind") void finish(true);
   }
 
-  async function finish() {
+  async function finish(withReminder: boolean) {
     setError(null);
+    if (withReminder) {
+      await enableReminders();
+    }
     setLoading(true);
     try {
       await setupOnboarding({
@@ -323,10 +354,10 @@ export default function OnboardingScreen() {
   }
 
   const steps: Step[] = alreadyPaired
-    ? ["finance", "fitness", "habit"]
+    ? ["finance", "fitness", "habit", "remind"]
     : couple
-      ? ["mode", "invite", "finance", "fitness", "habit"]
-      : ["mode", "finance", "fitness", "habit"];
+      ? ["mode", "invite", "finance", "fitness", "habit", "remind"]
+      : ["mode", "finance", "fitness", "habit", "remind"];
   const progress = Math.max(1, steps.indexOf(step) + 1);
   const total = steps.length;
 
@@ -445,21 +476,64 @@ export default function OnboardingScreen() {
             </>
           ) : null}
 
-          {step === "fitness" || step === "habit" ? (
+          {step === "fitness" ? (
             <>
-              <Text style={styles.title}>{STEP_COPY[step].title}</Text>
+              <Text style={styles.title}>{STEP_COPY.fitness.title}</Text>
               <Text style={styles.body}>
                 {couple
-                  ? `${STEP_COPY[step].body} Mark household ones as Together.`
-                  : STEP_COPY[step].body}
+                  ? `${STEP_COPY.fitness.body} Mark household ones as Together.`
+                  : STEP_COPY.fitness.body}
+              </Text>
+              <MovementPicker
+                templates={byGroup.fitness}
+                selected={selected}
+                targets={targets}
+                periods={periods}
+                locked={locked}
+                couple={couple}
+                onToggle={toggle}
+                onScope={setScope}
+                onTarget={(slug, value) =>
+                  setTargets((prev) => ({ ...prev, [slug]: value }))
+                }
+                onPeriod={setMovementPeriod}
+              />
+            </>
+          ) : null}
+
+          {step === "habit" ? (
+            <>
+              <Text style={styles.title}>{STEP_COPY.habit.title}</Text>
+              <Text style={styles.body}>
+                {couple
+                  ? `${STEP_COPY.habit.body} Mark household ones as Together.`
+                  : STEP_COPY.habit.body}
               </Text>
               <TemplatePicker
-                templates={byGroup[step]}
+                templates={byGroup.habit}
                 selected={selected}
                 locked={locked}
                 couple={couple}
                 onToggle={toggle}
                 onScope={setScope}
+              />
+            </>
+          ) : null}
+
+          {step === "remind" ? (
+            <>
+              <Text style={styles.title}>Nightly reminder</Text>
+              <Text style={styles.body}>
+                We’ll nudge you at{" "}
+                {formatReminderTime(reminderHour, reminderMinute)} to wrap up
+                the day. You can change this anytime in Settings.
+              </Text>
+              <ReminderTimePicker
+                hour={reminderHour}
+                minute={reminderMinute}
+                onChange={(nextHour, nextMinute) => {
+                  void saveReminderTime(nextHour, nextMinute);
+                }}
               />
             </>
           ) : null}
@@ -477,11 +551,9 @@ export default function OnboardingScreen() {
             <View style={styles.cta}>
               <PrimaryButton
                 title={
-                  step === "habit"
-                    ? "Start NightCap"
-                    : step === "invite"
-                      ? "Continue"
-                      : "Continue"
+                  step === "remind"
+                    ? `Remind me at ${formatReminderTime(reminderHour, reminderMinute)}`
+                    : "Continue"
                 }
                 onPress={() => nextFrom(step)}
                 loading={loading}
@@ -494,6 +566,11 @@ export default function OnboardingScreen() {
               {step === "finance" || step === "fitness" || step === "habit" ? (
                 <Pressable onPress={() => skipGroup(step)} hitSlop={8}>
                   <Text style={styles.skip}>None of these</Text>
+                </Pressable>
+              ) : null}
+              {step === "remind" ? (
+                <Pressable onPress={() => void finish(false)} hitSlop={8}>
+                  <Text style={styles.skip}>Not now</Text>
                 </Pressable>
               ) : null}
             </View>

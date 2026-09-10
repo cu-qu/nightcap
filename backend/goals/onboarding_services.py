@@ -5,7 +5,32 @@ from django.utils import timezone
 from accounts.models import UserProfile
 from categories.defaults import create_default_groups_for_user
 from categories.models import CategoryGroup, TrackingCategory, default_metric_for_type
+from entries.models import Entry
 from goals.models import Goal, GoalTemplate
+
+
+QUANTITY_UNITS = {
+    "minutes",
+    "miles",
+    "km",
+    "reps",
+    "sessions",
+    "count",
+    "pages",
+    "glasses",
+}
+
+
+def _metric_for_template(template: GoalTemplate) -> tuple[str, str]:
+    metric_kind, unit = default_metric_for_type(template.category_type)
+    custom = (getattr(template, "category_unit", "") or "").strip()
+    if not custom:
+        return metric_kind, unit
+    if custom == "usd":
+        return TrackingCategory.METRIC_AMOUNT, custom
+    if custom in QUANTITY_UNITS:
+        return TrackingCategory.METRIC_QUANTITY, custom
+    return TrackingCategory.METRIC_QUANTITY, custom
 
 
 def _group_for_template(user, template: GoalTemplate):
@@ -22,7 +47,7 @@ def _group_for_template(user, template: GoalTemplate):
 
 
 def ensure_category_for_template(user, template: GoalTemplate) -> tuple[TrackingCategory, bool]:
-    metric_kind, unit = default_metric_for_type(template.category_type)
+    metric_kind, unit = _metric_for_template(template)
     group = _group_for_template(user, template)
     defaults = {
         "metric_kind": metric_kind,
@@ -49,9 +74,16 @@ def ensure_category_for_template(user, template: GoalTemplate) -> tuple[Tracking
     if group and category.group_id is None:
         category.group = group
         updates.append("group")
+    unit_changed = category.unit != unit or category.metric_kind != metric_kind
+    if unit_changed and (
+        created or not Entry.objects.filter(category=category).exists()
+    ):
+        category.unit = unit
+        category.metric_kind = metric_kind
+        updates.extend(["unit", "metric_kind"])
     if updates:
         updates.append("updated_at")
-        category.save(update_fields=updates)
+        category.save(update_fields=list(dict.fromkeys(updates)))
     return category, created
 
 

@@ -15,7 +15,7 @@ export type TemplateSelection = {
   slug: string;
   target_value?: string;
   scope?: GoalScope;
-  period?: "weekly" | "monthly";
+  period?: "daily" | "weekly" | "monthly";
 };
 
 export async function fetchOnboardingStatus(): Promise<OnboardingStatus> {

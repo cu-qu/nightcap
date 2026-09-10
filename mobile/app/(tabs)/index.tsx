@@ -26,7 +26,7 @@ import {
 export default function HomeScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const setDate = useRitualDraftStore((s) => s.setDate);
+  const beginForDate = useRitualDraftStore((s) => s.beginForDate);
   const loadGoals = useGoalsStore((s) => s.load);
   const goalsPeriod = useGoalsStore((s) => s.period);
   const today = todayIso();
@@ -97,7 +97,7 @@ export default function HomeScreen() {
   function startNightCap() {
     if (moonVisible) return;
     didNavigate.current = false;
-    setDate(today);
+    beginForDate(today, { reset: hasTodayNightCap });
     setMoonVisible(true);
   }
 

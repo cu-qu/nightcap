@@ -1,9 +1,12 @@
-from dataclasses import dataclass
+import operator
 from calendar import monthrange
+from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
+from functools import reduce
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from categories.models import TrackingCategory
@@ -177,6 +180,46 @@ def aggregate_entries(user, category, start: date, end: date, metric_kind: str) 
     return Decimal(total or 0)
 
 
+def entry_metric_value(entry: Entry, metric_kind: str) -> Decimal:
+    if metric_kind == TrackingCategory.METRIC_AMOUNT:
+        return Decimal(entry.amount or 0)
+    if metric_kind == TrackingCategory.METRIC_QUANTITY:
+        return Decimal(entry.quantity or 0)
+    if entry.quantity is not None and entry.quantity >= 1:
+        return Decimal("1")
+    return Decimal("0")
+
+
+def combine_shared_day_values(day_entries: list[Entry], metric_kind: str) -> Decimal:
+    """Count a shared day once when both partners marked With Partner.
+
+    If both logged the matching category as `with_partner` on the same date,
+    take the max of those values (typically the same session). Otherwise sum
+    whatever was logged — Alone + Alone, or one partner only.
+    """
+    if not day_entries:
+        return Decimal("0")
+    partner_values = [
+        entry_metric_value(entry, metric_kind)
+        for entry in day_entries
+        if entry.completed_with == Entry.COMPLETED_WITH_PARTNER
+    ]
+    if len(partner_values) >= 2:
+        alone_total = sum(
+            (
+                entry_metric_value(entry, metric_kind)
+                for entry in day_entries
+                if entry.completed_with != Entry.COMPLETED_WITH_PARTNER
+            ),
+            Decimal("0"),
+        )
+        return max(partner_values) + alone_total
+    return sum(
+        (entry_metric_value(entry, metric_kind) for entry in day_entries),
+        Decimal("0"),
+    )
+
+
 def partner_categories_for_goal(goal: Goal) -> list[tuple]:
     """Categories that roll into this goal (both partners when shared)."""
     if goal.scope != Goal.SCOPE_SHARED or not goal.partnership_id:
@@ -192,10 +235,26 @@ def partner_categories_for_goal(goal: Goal) -> list[tuple]:
 
 
 def aggregate_goal_entries(goal: Goal, start: date, end: date) -> Decimal:
-    total = Decimal("0")
     metric = goal.category.metric_kind
-    for user, category in partner_categories_for_goal(goal):
-        total += aggregate_entries(user, category, start, end, metric)
+    pairs = partner_categories_for_goal(goal)
+    # Spend always sums both partners. With Partner dedupe is for workouts/habits.
+    if len(pairs) < 2 or not goal.category.uses_completed_with():
+        total = Decimal("0")
+        for user, category in pairs:
+            total += aggregate_entries(user, category, start, end, metric)
+        return total
+
+    match = reduce(
+        operator.or_,
+        (Q(user=user, category=category) for user, category in pairs),
+    )
+    entries = Entry.objects.filter(match, date__gte=start, date__lte=end)
+    by_date: dict[date, list[Entry]] = defaultdict(list)
+    for entry in entries:
+        by_date[entry.date].append(entry)
+    total = Decimal("0")
+    for day_entries in by_date.values():
+        total += combine_shared_day_values(day_entries, metric)
     return total
 
 
@@ -227,7 +286,9 @@ def compute_goal_progress(goal: Goal, reference_date: date | None = None) -> Goa
 
 
 def compute_all_goal_progress(user, reference_date: date | None = None) -> list[GoalProgress]:
-    goals = Goal.objects.filter(user=user, is_active=True).select_related("category")
+    goals = Goal.objects.filter(user=user, is_active=True).select_related(
+        "category", "partnership"
+    )
     return [compute_goal_progress(goal, reference_date) for goal in goals]
 
 
@@ -417,7 +478,7 @@ def compute_group_goal_summary(
 
     goals = (
         Goal.objects.filter(user=user, is_active=True)
-        .select_related("category", "category__group")
+        .select_related("category", "category__group", "partnership")
         .order_by(
             "category__group__sort_order",
             "category__sort_order",

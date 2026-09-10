@@ -13,10 +13,11 @@ import {
 
 type Props = {
   goal: GroupGoalItem;
+  onEdit?: (goal: GroupGoalItem) => void;
   onDelete?: (goal: GroupGoalItem) => void;
 };
 
-export function GoalHealthCard({ goal, onDelete }: Props) {
+export function GoalHealthCard({ goal, onEdit, onDelete }: Props) {
   const health = uiHealth(goal.health);
   const pill = healthPill(health);
   const pct = Math.min(100, Math.max(0, goal.percent_used));
@@ -39,12 +40,19 @@ export function GoalHealthCard({ goal, onDelete }: Props) {
   }
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      onPress={onEdit ? () => onEdit(goal) : undefined}
+      disabled={!onEdit}
+      accessibilityRole={onEdit ? "button" : undefined}
+      accessibilityLabel={onEdit ? `Edit ${goal.display_name}` : undefined}
+      style={styles.card}
+    >
       <View style={styles.top}>
         <Text style={styles.emoji}>
           {categoryGlyph({
             emoji: goal.category.emoji,
             icon: goal.category.icon,
+            name: goal.category.name || goal.display_name,
           })}
         </Text>
         <View style={styles.titles}>
@@ -75,12 +83,21 @@ export function GoalHealthCard({ goal, onDelete }: Props) {
       </View>
       {isOver ? <Text style={styles.overHint}>over</Text> : null}
 
-      {onDelete ? (
-        <Pressable onPress={confirmDelete} hitSlop={8} style={styles.remove}>
-          <Text style={styles.removeText}>Remove</Text>
-        </Pressable>
+      {onEdit || onDelete ? (
+        <View style={styles.actions}>
+          {onEdit ? (
+            <Pressable onPress={() => onEdit(goal)} hitSlop={8}>
+              <Text style={styles.editText}>Edit</Text>
+            </Pressable>
+          ) : null}
+          {onDelete ? (
+            <Pressable onPress={confirmDelete} hitSlop={8}>
+              <Text style={styles.removeText}>Remove</Text>
+            </Pressable>
+          ) : null}
+        </View>
       ) : null}
-    </View>
+    </Pressable>
   );
 }
 
@@ -157,9 +174,16 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
-  remove: {
+  actions: {
     marginTop: 12,
-    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  editText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.accentSoft,
   },
   removeText: {
     fontSize: 13,

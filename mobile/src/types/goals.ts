@@ -57,6 +57,9 @@ export type GroupGoalItem = {
   mode: GoalMode;
   health: GoalHealth | "behind";
   period: "daily" | "weekly" | "monthly";
+  rolls_into_month?: boolean;
+  base_target_value?: string | null;
+  direction?: "max" | "min";
   target_value: string;
   current_value: string;
   remaining_value: string;
@@ -88,7 +91,7 @@ export type GroupGoalSummary = {
 export type SetGoalInput = {
   category_uuid: string;
   target_value: string;
-  period: GoalPeriod;
+  period: GoalPeriod | "daily";
   direction?: "max" | "min";
   scope?: "personal" | "shared";
 };

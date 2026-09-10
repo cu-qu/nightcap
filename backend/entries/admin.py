@@ -5,10 +5,30 @@ from .models import DayReflection, Entry, NightCap
 
 @admin.register(NightCap)
 class NightCapAdmin(admin.ModelAdmin):
-    list_display = ("user", "date", "mood", "status", "completed_at", "uuid", "updated_at")
+    list_display = (
+        "user",
+        "date",
+        "mood",
+        "status",
+        "has_favorite_photo",
+        "completed_at",
+        "uuid",
+        "updated_at",
+    )
     list_filter = ("status", "date")
-    search_fields = ("user__username", "user__email", "uuid", "reflection", "mood")
-    readonly_fields = ("uuid",)
+    search_fields = (
+        "user__username",
+        "user__email",
+        "uuid",
+        "reflection",
+        "favorite_moment",
+        "mood",
+    )
+    readonly_fields = ("uuid", "has_favorite_photo")
+
+    @admin.display(boolean=True, description="Photo")
+    def has_favorite_photo(self, obj):
+        return bool(obj.favorite_photo)
 
 
 @admin.register(Entry)
@@ -19,11 +39,12 @@ class EntryAdmin(admin.ModelAdmin):
         "category",
         "amount",
         "quantity",
+        "completed_with",
         "nightcap",
         "uuid",
         "updated_at",
     )
-    list_filter = ("date", "category__type")
+    list_filter = ("date", "category__type", "completed_with")
     search_fields = (
         "user__username",
         "user__email",

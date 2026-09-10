@@ -23,7 +23,7 @@ export const SPEND_UNIT_OPTIONS: UnitOption[] = [
   },
 ];
 
-/** Units offered for Follow-up / custom groups. */
+/** Units offered for Health / custom groups. */
 export const GENERAL_UNIT_OPTIONS: UnitOption[] = [
   {
     id: "usd",
@@ -39,7 +39,15 @@ export const GENERAL_UNIT_OPTIONS: UnitOption[] = [
     chip: "min",
     unit: "minutes",
     metric_kind: "quantity",
-    type: "habit",
+    type: "fitness",
+  },
+  {
+    id: "sessions",
+    label: "Sessions",
+    chip: "sessions",
+    unit: "sessions",
+    metric_kind: "quantity",
+    type: "fitness",
   },
   {
     id: "km",
@@ -78,6 +86,14 @@ export const GENERAL_UNIT_OPTIONS: UnitOption[] = [
     label: "Pages",
     chip: "pages",
     unit: "pages",
+    metric_kind: "quantity",
+    type: "habit",
+  },
+  {
+    id: "glasses",
+    label: "Glasses of water",
+    chip: "glasses",
+    unit: "glasses",
     metric_kind: "quantity",
     type: "habit",
   },

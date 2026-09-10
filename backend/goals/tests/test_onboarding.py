@@ -76,3 +76,48 @@ class OnboardingTests(TestCase):
         self.assertGreater(resp.json()["available_template_count"], 0)
         self.assertEqual(resp.json()["tracking_mode"], "solo")
         self.assertIsNone(resp.json()["partnership"])
+
+    def test_movement_templates_create_minutes_and_miles_categories(self):
+        resp = self.client.post(
+            "/api/v1/onboarding/apply/",
+            {
+                "templates": [
+                    {"slug": "running-minutes-weekly", "target_value": "30", "period": "daily"},
+                    {"slug": "running-miles-weekly", "target_value": "5"},
+                    {"slug": "biking-minutes-weekly"},
+                    {"slug": "biking-miles-weekly", "target_value": "8", "period": "weekly"},
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        run_time = TrackingCategory.objects.get(user=self.user, name="Running time")
+        run_dist = TrackingCategory.objects.get(user=self.user, name="Running distance")
+        bike_time = TrackingCategory.objects.get(user=self.user, name="Biking time")
+        bike_dist = TrackingCategory.objects.get(user=self.user, name="Biking distance")
+        self.assertEqual(run_time.unit, "minutes")
+        self.assertEqual(run_time.metric_kind, TrackingCategory.METRIC_QUANTITY)
+        self.assertEqual(run_dist.unit, "miles")
+        self.assertEqual(bike_time.unit, "minutes")
+        self.assertEqual(bike_dist.unit, "miles")
+        run_goal = Goal.objects.get(user=self.user, category=run_time, is_active=True)
+        self.assertEqual(run_goal.period, Goal.PERIOD_DAILY)
+        self.assertEqual(run_goal.target_value, Decimal("30"))
+        self.assertEqual(
+            Goal.objects.get(user=self.user, category=run_dist).target_value,
+            Decimal("5"),
+        )
+        self.assertEqual(
+            Goal.objects.get(user=self.user, category=bike_dist).target_value,
+            Decimal("8"),
+        )
+
+    def test_templates_include_category_unit(self):
+        resp = self.client.get("/api/v1/onboarding/templates/")
+        self.assertEqual(resp.status_code, 200)
+        by_slug = {item["slug"]: item for item in resp.json()["templates"]}
+        self.assertEqual(by_slug["running-minutes-weekly"]["category_unit"], "minutes")
+        self.assertEqual(by_slug["running-miles-weekly"]["category_unit"], "miles")
+        self.assertEqual(by_slug["biking-minutes-weekly"]["category_unit"], "minutes")
+        self.assertEqual(by_slug["workouts-weekly-min"]["category_unit"], "sessions")
+

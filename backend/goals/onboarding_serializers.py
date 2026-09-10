@@ -16,6 +16,7 @@ class GoalTemplateSerializer(serializers.ModelSerializer):
             "category_type",
             "category_icon",
             "category_emoji",
+            "category_unit",
             "category_group_key",
             "period",
             "direction",
@@ -45,6 +46,7 @@ class OnboardingTemplateSelectionSerializer(serializers.Serializer):
     )
     period = serializers.ChoiceField(
         choices=[
+            (Goal.PERIOD_DAILY, "Daily"),
             (Goal.PERIOD_WEEKLY, "Weekly"),
             (Goal.PERIOD_MONTHLY, "Monthly"),
         ],

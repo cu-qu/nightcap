@@ -108,6 +108,10 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "mediafiles"
+# Favorite photos are stored on NightCap.ImageField; 12 MB leaves headroom
+# above the 8 MB serializer cap so multipart parsing does not reject first.
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("DATA_UPLOAD_MAX_MEMORY_SIZE", 12 * 1024 * 1024))
+FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("FILE_UPLOAD_MAX_MEMORY_SIZE", 8 * 1024 * 1024))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

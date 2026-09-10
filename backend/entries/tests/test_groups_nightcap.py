@@ -7,6 +7,7 @@ from accounts.models import User
 from categories.defaults import (
     DEFAULT_GROUPS,
     create_default_categories_for_user,
+    create_default_groups_for_user,
 )
 from categories.models import CategoryGroup, TrackingCategory
 from entries.models import NightCap
@@ -30,6 +31,20 @@ class CategoryGroupAndNightCapApiTests(TestCase):
         self.assertEqual(keys, {g["key"] for g in DEFAULT_GROUPS})
         spend = CategoryGroup.objects.get(user=self.user, key="daily_spend")
         self.assertGreaterEqual(spend.categories.count(), 8)
+        health = CategoryGroup.objects.get(user=self.user, key="follow_up")
+        self.assertEqual(health.name, "Health")
+        names = set(health.categories.values_list("name", flat=True))
+        self.assertEqual(names, {"Water", "Workout"})
+
+    def test_legacy_follow_up_group_renames_to_health(self):
+        group = CategoryGroup.objects.get(user=self.user, key="follow_up")
+        group.name = "Follow-up"
+        group.icon = "follow_up"
+        group.save(update_fields=["name", "icon"])
+        create_default_groups_for_user(self.user)
+        group.refresh_from_db()
+        self.assertEqual(group.name, "Health")
+        self.assertEqual(group.icon, "health")
 
     def test_category_emoji_seeded_and_writable(self):
         groceries = TrackingCategory.objects.get(user=self.user, name="Groceries")
@@ -53,6 +68,7 @@ class CategoryGroupAndNightCapApiTests(TestCase):
         self.assertEqual(len(data), 2)
         self.assertEqual(data[0]["key"], "daily_spend")
         self.assertEqual(data[1]["key"], "follow_up")
+        self.assertEqual(data[1]["name"], "Health")
         self.assertTrue(data[0]["categories"])
         self.assertIn("uuid", data[0]["categories"][0])
 
@@ -171,3 +187,26 @@ class CategoryGroupAndNightCapApiTests(TestCase):
         self.assertEqual(
             NightCap.objects.filter(user=self.user, date=date.today()).count(), 1
         )
+
+    def test_nightcap_retrieve_includes_entry_amounts(self):
+        spend = TrackingCategory.objects.get(user=self.user, name="Groceries")
+        today = date.today().isoformat()
+        ritual = self.client.post(
+            "/api/v1/ritual/",
+            {
+                "date": today,
+                "items": [{"category_uuid": str(spend.uuid), "amount": "13.00"}],
+            },
+            format="json",
+        )
+        self.assertEqual(ritual.status_code, 200, ritual.content)
+
+        resp = self.client.get(f"/api/v1/nightcaps/{today}/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
+        self.assertEqual(len(data["entries"]), 1)
+        entry = data["entries"][0]
+        self.assertEqual(entry["category_uuid"], str(spend.uuid))
+        self.assertEqual(entry["amount"], "13.00")
+        self.assertEqual(entry["category_detail"]["type"], "finance_expense")
+        self.assertEqual(entry["category_detail"]["metric_kind"], "amount")

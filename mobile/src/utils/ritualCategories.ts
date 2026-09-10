@@ -1,8 +1,10 @@
-import type { Category } from "@/src/types/api";
+import type { Category, SharedRitualHint } from "@/src/types/api";
 import {
   FOLLOW_UP_ICON_KEYS,
   SPEND_ICON_KEYS,
 } from "@/src/theme/iconMap";
+import { formatCurrency } from "@/src/utils/date";
+import { formatQuantity, quantityUnitLabel } from "@/src/utils/units";
 
 function sortByIconOrder(list: Category[], order: readonly string[]) {
   return [...list].sort((a, b) => {
@@ -12,7 +14,7 @@ function sortByIconOrder(list: Category[], order: readonly string[]) {
   });
 }
 
-/** Ordered NightCap walkthrough: spend chips → follow-up defaults → custom habits. */
+/** Ordered NightCap walkthrough: spend chips → health defaults → custom habits. */
 export function getRitualCategoryQueue(categories: Category[]): Category[] {
   const spend = sortByIconOrder(
     categories.filter(
@@ -57,6 +59,15 @@ export function isSpendCategory(cat: Category): boolean {
   );
 }
 
+/** With Partner / Alone is for workouts and habits, not money. */
+export function categorySupportsCompletedWith(cat: Category): boolean {
+  if (cat.metric_kind === "amount") return false;
+  if (cat.type === "finance_expense" || cat.type === "finance_income") {
+    return false;
+  }
+  return true;
+}
+
 export function categoryPhaseLabel(cat: Category): string {
   if (isSpendCategory(cat)) return "Spend";
   if (cat.type === "finance_income") return "Invest";
@@ -66,10 +77,8 @@ export function categoryPhaseLabel(cat: Category): string {
 
 export function categoryUnitLabel(cat: Category): string {
   if (cat.metric_kind === "amount") return "USD";
-  if (cat.unit === "minutes") return "minutes";
-  if (cat.unit === "km") return "km";
   if (cat.metric_kind === "boolean") return "yes / no";
-  return cat.unit || "count";
+  return quantityUnitLabel(cat.unit) || cat.unit || "count";
 }
 
 export function categoryInputPrefix(cat: Category): string | undefined {
@@ -78,7 +87,29 @@ export function categoryInputPrefix(cat: Category): string | undefined {
 
 export function categoryInputSuffix(cat: Category): string | undefined {
   if (cat.metric_kind === "amount" || cat.metric_kind === "boolean") return undefined;
-  if (cat.unit === "minutes") return "min";
-  if (cat.unit === "km") return "km";
-  return cat.unit || undefined;
+  return quantityUnitLabel(cat.unit) || cat.unit || undefined;
+}
+
+export function formatPartnerRitualValue(hint: SharedRitualHint): string {
+  const name = hint.partner_username;
+  const together =
+    hint.metric_kind === "amount"
+      ? ""
+      : hint.completed_with === "with_partner"
+        ? " with you"
+        : hint.completed_with === "alone"
+          ? " on their own"
+          : "";
+  if (hint.metric_kind === "amount") {
+    const n = Number(hint.amount);
+    if (!Number.isFinite(n)) return `${name} already logged this${together}`;
+    return `${name} logged ${formatCurrency(n)}${together}`;
+  }
+  if (hint.metric_kind === "boolean") {
+    const yes = Number(hint.quantity) >= 1;
+    return `${name} said ${yes ? "yes" : "no"}${together}`;
+  }
+  const n = Number(hint.quantity);
+  if (!Number.isFinite(n)) return `${name} already logged this${together}`;
+  return `${name} logged ${formatQuantity(n, hint.unit)}${together}`;
 }

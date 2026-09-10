@@ -59,6 +59,8 @@ API docs are available at http://localhost:8000/api/docs/.
 - `GET /api/v1/entries/period-summary/?period=weekly|monthly`
 - `GET/POST /api/v1/nightcaps/` — one NightCap record per user per day
 - `GET/PATCH /api/v1/nightcaps/{YYYY-MM-DD}/`
+- `GET/POST/DELETE /api/v1/nightcaps/{YYYY-MM-DD}/photo/` — favorite photo of the day (Django `ImageField`)
+- `GET /api/v1/ritual/shared/?date=` — partner values on Together categories for that NightCap date
 - `POST /api/v1/ritual/` — nightly batch upsert (creates/updates NightCap + entries + reflection)
 - `GET/PUT/PATCH /api/v1/day-reflections/{YYYY-MM-DD}/` (legacy; prefer NightCaps)
 - `GET /api/v1/calendar/?year=&month=` — month markers for the calendar UI

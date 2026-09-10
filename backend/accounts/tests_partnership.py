@@ -1,7 +1,9 @@
+from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import PartnershipMember, User, UserProfile
@@ -11,7 +13,6 @@ from categories.models import TrackingCategory
 from entries.models import Entry
 from goals.models import Goal
 from goals.template_catalog import seed_goal_templates
-from django.utils import timezone
 
 
 class PartnershipInviteTests(TestCase):
@@ -262,3 +263,230 @@ class SharedGoalProgressTests(TestCase):
         row = next(item for item in rows if item["category_detail"]["name"] == "Groceries")
         self.assertEqual(row["scope"], "shared")
         self.assertEqual(Decimal(str(row["progress"]["current_value"])), Decimal("65.00"))
+
+    def test_ritual_shared_shows_partner_entry(self):
+        setup = self.client.post(
+            "/api/v1/onboarding/setup/",
+            {
+                "mode": "couple",
+                "templates": [
+                    {"slug": "groceries-monthly-max", "scope": "shared"},
+                    {"slug": "workouts-weekly-min", "scope": "personal"},
+                ],
+            },
+            format="json",
+        )
+        code = setup.json()["partnership"]["invite_code"]
+        partner_client = APIClient()
+        partner_client.force_authenticate(user=self.b)
+        partner_client.post("/api/v1/partnership/join/", {"invite_code": code}, format="json")
+
+        cat_a = TrackingCategory.objects.get(user=self.a, name="Groceries")
+        cat_b = TrackingCategory.objects.get(user=self.b, name="Groceries")
+        today = timezone.localdate()
+        Entry.objects.create(user=self.b, category=cat_b, date=today, amount=Decimal("40.00"))
+
+        resp = self.client.get(f"/api/v1/ritual/shared/?date={today.isoformat()}")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
+        self.assertEqual(data["partner_username"], "sam")
+        self.assertIn(str(cat_a.uuid), data["shared_category_uuids"])
+        self.assertEqual(len(data["entries"]), 1)
+        groc = data["entries"][0]
+        self.assertEqual(groc["category_uuid"], str(cat_a.uuid))
+        self.assertEqual(groc["partner_username"], "sam")
+        self.assertEqual(Decimal(str(groc["amount"])), Decimal("40.00"))
+        self.assertEqual(groc["completed_with"], Entry.COMPLETED_ALONE)
+        workout_a = TrackingCategory.objects.get(user=self.a, name="Workout")
+        self.assertNotIn(str(workout_a.uuid), data["shared_category_uuids"])
+
+    def _join_as_couple(self, templates):
+        setup = self.client.post(
+            "/api/v1/onboarding/setup/",
+            {"mode": "couple", "templates": templates},
+            format="json",
+        )
+        self.assertEqual(setup.status_code, 200, setup.content)
+        code = setup.json()["partnership"]["invite_code"]
+        partner_client = APIClient()
+        partner_client.force_authenticate(user=self.b)
+        join = partner_client.post(
+            "/api/v1/partnership/join/",
+            {"invite_code": code},
+            format="json",
+        )
+        self.assertEqual(join.status_code, 200, join.content)
+        return partner_client
+
+    def test_shared_workout_dedupes_when_both_with_partner(self):
+        self._join_as_couple(
+            [{"slug": "workouts-weekly-min", "scope": "shared"}]
+        )
+        cat_a = TrackingCategory.objects.get(user=self.a, name="Workout")
+        cat_b = TrackingCategory.objects.get(user=self.b, name="Workout")
+        today = timezone.localdate()
+        Entry.objects.create(
+            user=self.a,
+            category=cat_a,
+            date=today,
+            quantity=Decimal("1"),
+            completed_with=Entry.COMPLETED_WITH_PARTNER,
+        )
+        Entry.objects.create(
+            user=self.b,
+            category=cat_b,
+            date=today,
+            quantity=Decimal("1"),
+            completed_with=Entry.COMPLETED_WITH_PARTNER,
+        )
+
+        resp = self.client.get("/api/v1/goals/")
+        rows = resp.json()["results"] if isinstance(resp.json(), dict) else resp.json()
+        row = next(item for item in rows if item["category_detail"]["name"] == "Workout")
+        self.assertEqual(row["scope"], "shared")
+        self.assertEqual(Decimal(str(row["progress"]["current_value"])), Decimal("1"))
+
+    def test_shared_workout_sums_when_either_is_alone(self):
+        self._join_as_couple(
+            [{"slug": "workouts-weekly-min", "scope": "shared"}]
+        )
+        cat_a = TrackingCategory.objects.get(user=self.a, name="Workout")
+        cat_b = TrackingCategory.objects.get(user=self.b, name="Workout")
+        today = timezone.localdate()
+        Entry.objects.create(
+            user=self.a,
+            category=cat_a,
+            date=today,
+            quantity=Decimal("1"),
+            completed_with=Entry.COMPLETED_WITH_PARTNER,
+        )
+        Entry.objects.create(
+            user=self.b,
+            category=cat_b,
+            date=today,
+            quantity=Decimal("1"),
+            completed_with=Entry.COMPLETED_ALONE,
+        )
+
+        resp = self.client.get("/api/v1/goals/")
+        rows = resp.json()["results"] if isinstance(resp.json(), dict) else resp.json()
+        row = next(item for item in rows if item["category_detail"]["name"] == "Workout")
+        self.assertEqual(Decimal(str(row["progress"]["current_value"])), Decimal("2"))
+
+    def test_shared_progress_counts_unpaired_with_partner(self):
+        self._join_as_couple(
+            [{"slug": "workouts-weekly-min", "scope": "shared"}]
+        )
+        cat_a = TrackingCategory.objects.get(user=self.a, name="Workout")
+        today = timezone.localdate()
+        Entry.objects.create(
+            user=self.a,
+            category=cat_a,
+            date=today,
+            quantity=Decimal("1"),
+            completed_with=Entry.COMPLETED_WITH_PARTNER,
+        )
+
+        resp = self.client.get("/api/v1/goals/")
+        rows = resp.json()["results"] if isinstance(resp.json(), dict) else resp.json()
+        row = next(item for item in rows if item["category_detail"]["name"] == "Workout")
+        self.assertEqual(Decimal(str(row["progress"]["current_value"])), Decimal("1"))
+
+    def test_personal_goal_counts_own_with_partner_entry(self):
+        self._join_as_couple(
+            [{"slug": "workouts-weekly-min", "scope": "personal"}]
+        )
+        cat_a = TrackingCategory.objects.get(user=self.a, name="Workout")
+        cat_b = TrackingCategory.objects.get(user=self.b, name="Workout")
+        today = timezone.localdate()
+        Entry.objects.create(
+            user=self.a,
+            category=cat_a,
+            date=today,
+            quantity=Decimal("1"),
+            completed_with=Entry.COMPLETED_WITH_PARTNER,
+        )
+        Entry.objects.create(
+            user=self.b,
+            category=cat_b,
+            date=today,
+            quantity=Decimal("1"),
+            completed_with=Entry.COMPLETED_WITH_PARTNER,
+        )
+
+        resp = self.client.get("/api/v1/goals/")
+        rows = resp.json()["results"] if isinstance(resp.json(), dict) else resp.json()
+        row = next(item for item in rows if item["category_detail"]["name"] == "Workout")
+        self.assertEqual(row["scope"], "personal")
+        self.assertEqual(Decimal(str(row["progress"]["current_value"])), Decimal("1"))
+
+    def test_shared_workout_mixed_days_together_then_alone(self):
+        self._join_as_couple(
+            [{"slug": "workouts-weekly-min", "scope": "shared"}]
+        )
+        cat_a = TrackingCategory.objects.get(user=self.a, name="Workout")
+        cat_b = TrackingCategory.objects.get(user=self.b, name="Workout")
+        today = timezone.localdate()
+        monday = today - timedelta(days=today.weekday())
+        together = monday
+        alone = monday + timedelta(days=1)
+        Entry.objects.create(
+            user=self.a,
+            category=cat_a,
+            date=together,
+            quantity=Decimal("1"),
+            completed_with=Entry.COMPLETED_WITH_PARTNER,
+        )
+        Entry.objects.create(
+            user=self.b,
+            category=cat_b,
+            date=together,
+            quantity=Decimal("1"),
+            completed_with=Entry.COMPLETED_WITH_PARTNER,
+        )
+        Entry.objects.create(
+            user=self.a,
+            category=cat_a,
+            date=alone,
+            quantity=Decimal("1"),
+            completed_with=Entry.COMPLETED_ALONE,
+        )
+        Entry.objects.create(
+            user=self.b,
+            category=cat_b,
+            date=alone,
+            quantity=Decimal("1"),
+            completed_with=Entry.COMPLETED_ALONE,
+        )
+
+        resp = self.client.get("/api/v1/goals/")
+        rows = resp.json()["results"] if isinstance(resp.json(), dict) else resp.json()
+        row = next(item for item in rows if item["category_detail"]["name"] == "Workout")
+        self.assertEqual(Decimal(str(row["progress"]["current_value"])), Decimal("3"))
+
+    def test_shared_spend_always_sums_both_partners(self):
+        self._join_as_couple(
+            [{"slug": "groceries-monthly-max", "scope": "shared"}]
+        )
+        cat_a = TrackingCategory.objects.get(user=self.a, name="Groceries")
+        cat_b = TrackingCategory.objects.get(user=self.b, name="Groceries")
+        today = timezone.localdate()
+        Entry.objects.create(
+            user=self.a,
+            category=cat_a,
+            date=today,
+            amount=Decimal("40.00"),
+            completed_with=Entry.COMPLETED_WITH_PARTNER,
+        )
+        Entry.objects.create(
+            user=self.b,
+            category=cat_b,
+            date=today,
+            amount=Decimal("40.00"),
+            completed_with=Entry.COMPLETED_WITH_PARTNER,
+        )
+
+        resp = self.client.get("/api/v1/goals/")
+        rows = resp.json()["results"] if isinstance(resp.json(), dict) else resp.json()
+        row = next(item for item in rows if item["category_detail"]["name"] == "Groceries")
+        self.assertEqual(Decimal(str(row["progress"]["current_value"])), Decimal("80.00"))

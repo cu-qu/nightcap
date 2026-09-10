@@ -8,7 +8,7 @@ export {
 } from "@/src/lib/goalMode";
 
 import type { GoalMode, GroupGoalItem } from "@/src/types/goals";
-import { formatGoalNumber } from "@/src/lib/goalMode";
+import { formatCategoryValue } from "@/src/utils/units";
 
 export function periodPhrase(period: GroupGoalItem["period"] | string): string {
   if (period === "weekly") return "per week";
@@ -18,7 +18,7 @@ export function periodPhrase(period: GroupGoalItem["period"] | string): string {
 }
 
 function formatValue(goal: GroupGoalItem, raw: string): string {
-  return formatGoalNumber(raw, goal.category.metric_kind);
+  return formatCategoryValue(raw, goal.category);
 }
 
 export function goalHeadline(goal: GroupGoalItem): string {
@@ -53,8 +53,24 @@ export function directionForIntent(intent: GoalIntent): "max" | "min" {
   return intent === "stay_under" ? "max" : "min";
 }
 
+export function intentForMode(mode: GoalMode): GoalIntent {
+  return mode === "stay_under" ? "stay_under" : "reach";
+}
+
 export function defaultIntentForMetricKind(
   metric: "amount" | "quantity" | "boolean"
 ): GoalIntent {
   return metric === "amount" ? "stay_under" : "reach";
+}
+
+/** Stored target for editing — not the month-scaled weekly display value. */
+export function nativeTargetInput(goal: GroupGoalItem): string {
+  const raw =
+    goal.rolls_into_month && goal.base_target_value != null
+      ? String(goal.base_target_value)
+      : String(goal.target_value);
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+  if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
+  return String(n);
 }

@@ -6,7 +6,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import User
 from categories.defaults import create_default_categories_for_user
-from categories.models import TrackingCategory
+from categories.models import CategoryGroup, TrackingCategory
 from entries.models import Entry
 from goals.models import Goal
 
@@ -22,7 +22,7 @@ class SimpleGoalApiTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
         self.groceries = TrackingCategory.objects.get(user=self.user, name="Groceries")
-        self.read = TrackingCategory.objects.get(user=self.user, name="I Read")
+        self.water = TrackingCategory.objects.get(user=self.user, name="Water")
 
     def test_create_goal_with_category_uuid_and_progress(self):
         Entry.objects.create(
@@ -53,7 +53,7 @@ class SimpleGoalApiTests(TestCase):
         resp = self.client.post(
             "/api/v1/goals/",
             {
-                "category_uuid": str(self.read.uuid),
+                "category_uuid": str(self.water.uuid),
                 "target_value": "120",
                 "period": "weekly",
             },
@@ -149,7 +149,7 @@ class SimpleGoalApiTests(TestCase):
         )
         inactive = Goal.objects.create(
             user=self.user,
-            category=self.read,
+            category=self.water,
             period=Goal.PERIOD_WEEKLY,
             direction=Goal.DIRECTION_MIN,
             target_value=Decimal("60"),
@@ -183,7 +183,15 @@ class SimpleGoalApiTests(TestCase):
         self.assertFalse(goal.is_active)
 
     def test_group_summary_health_and_modes(self):
-        sauna = TrackingCategory.objects.get(user=self.user, name="Sauna / Meditation")
+        health = CategoryGroup.objects.get(user=self.user, key=CategoryGroup.KEY_FOLLOW_UP)
+        sauna = TrackingCategory.objects.create(
+            user=self.user,
+            name="Meditation",
+            type=TrackingCategory.HABIT,
+            metric_kind=TrackingCategory.METRIC_BOOLEAN,
+            unit="count",
+            group=health,
+        )
         # Stay under close to limit (85% of 100)
         Goal.objects.create(
             user=self.user,
@@ -202,7 +210,7 @@ class SimpleGoalApiTests(TestCase):
         # Pass / close (near hit: 85 of 100)
         Goal.objects.create(
             user=self.user,
-            category=self.read,
+            category=self.water,
             period=Goal.PERIOD_WEEKLY,
             direction=Goal.DIRECTION_MIN,
             target_value=Decimal("100"),
@@ -210,7 +218,7 @@ class SimpleGoalApiTests(TestCase):
         )
         Entry.objects.create(
             user=self.user,
-            category=self.read,
+            category=self.water,
             date=date.today(),
             quantity=Decimal("85"),
         )
@@ -239,7 +247,7 @@ class SimpleGoalApiTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.content)
         data = resp.json()
         self.assertEqual(data["counts"]["total"], 3)
-        self.assertEqual(data["counts"]["close"], 2)  # groceries near limit + read near pass
+        self.assertEqual(data["counts"]["close"], 2)  # groceries near limit + water near pass
         self.assertEqual(data["counts"]["passed"], 1)
         self.assertEqual(data["counts"]["stay_under"], 1)
         self.assertEqual(data["counts"]["pass"], 1)
@@ -295,10 +303,10 @@ class SimpleGoalApiTests(TestCase):
         by_name = {g["display_name"]: g for g in all_goals}
         self.assertEqual(by_name["Groceries"]["mode"], "stay_under")
         self.assertEqual(by_name["Groceries"]["health"], "close")
-        self.assertEqual(by_name["I Read"]["mode"], "pass")
-        self.assertEqual(by_name["I Read"]["health"], "close")
-        self.assertEqual(by_name["Sauna / Meditation"]["mode"], "completed")
-        self.assertEqual(by_name["Sauna / Meditation"]["health"], "passed")
+        self.assertEqual(by_name["Water"]["mode"], "pass")
+        self.assertEqual(by_name["Water"]["health"], "close")
+        self.assertEqual(by_name["Meditation"]["mode"], "completed")
+        self.assertEqual(by_name["Meditation"]["health"], "passed")
 
         monthly = self.client.get("/api/v1/goals/group-summary/?period=monthly")
         self.assertEqual(monthly.status_code, 200)
@@ -334,11 +342,11 @@ class SimpleGoalApiTests(TestCase):
         rolled = [g for g in monthly_goals if g["rolls_into_month"]]
         self.assertEqual(len(rolled), 2)
         self.assertTrue(all(g["period"] == "weekly" for g in rolled))
-        read_row = next(g for g in rolled if g["display_name"] == "I Read")
-        self.assertEqual(read_row["weeks_in_month"], weeks)
-        self.assertEqual(Decimal(str(read_row["base_target_value"])), Decimal("100"))
-        self.assertEqual(Decimal(str(read_row["target_value"])), Decimal("100") * weeks)
-        self.assertIn("weekly_progress", read_row)
+        water_row = next(g for g in rolled if g["display_name"] == "Water")
+        self.assertEqual(water_row["weeks_in_month"], weeks)
+        self.assertEqual(Decimal(str(water_row["base_target_value"])), Decimal("100"))
+        self.assertEqual(Decimal(str(water_row["target_value"])), Decimal("100") * weeks)
+        self.assertIn("weekly_progress", water_row)
 
         weekly = self.client.get("/api/v1/goals/group-summary/?period=weekly")
         self.assertEqual(weekly.status_code, 200)
@@ -348,9 +356,9 @@ class SimpleGoalApiTests(TestCase):
         self.assertEqual(week_body["metrics"]["stay_under"]["goal_count"], 0)
         # Weekly view is NOT scaled
         week_goals = [g for group in week_body["groups"] for g in group["goals"]]
-        read_week = next(g for g in week_goals if g["display_name"] == "I Read")
-        self.assertEqual(Decimal(str(read_week["target_value"])), Decimal("100"))
-        self.assertIsNone(read_week.get("weeks_in_month"))
+        water_week = next(g for g in week_goals if g["display_name"] == "Water")
+        self.assertEqual(Decimal(str(water_week["target_value"])), Decimal("100"))
+        self.assertIsNone(water_week.get("weeks_in_month"))
 
     def test_weekly_to_monthly_scaling_july_2026(self):
         """$45/week × 4 Mondays in July 2026 = $180; month current uses Jul entries."""

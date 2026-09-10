@@ -93,6 +93,7 @@ export type GoalTemplate = {
   category_type: CategoryType;
   category_icon: string;
   category_emoji: string;
+  category_unit?: string;
   category_group_key: string;
   period: "daily" | "weekly" | "monthly";
   direction: "max" | "min";
@@ -116,20 +117,26 @@ export type RegisterResponse = AuthTokens & {
 
 export type TokenResponse = AuthTokens;
 
+export type CompletedWith = "alone" | "with_partner";
+
 export type RitualItem = {
   category_uuid: string;
   amount?: string;
   quantity?: string;
   label?: string;
   notes?: string;
+  completed_with?: CompletedWith;
 };
 
 export type RitualRequest = {
   date: string;
   reflection?: string | null;
+  favorite_moment?: string | null;
   /** Mood string (emoji); max 32. Send `""` to clear. */
   mood?: string | null;
   status?: "draft" | "completed";
+  /** When true, entries omitted from `items` are deleted for that date. */
+  replace_items?: boolean;
   items?: RitualItem[];
 };
 
@@ -138,20 +145,26 @@ export type RitualEntry = {
   uuid?: string;
   category: number;
   category_uuid?: string;
+  category_detail?: Category;
   date: string;
   amount?: string | null;
   quantity?: string | null;
   label?: string;
   notes?: string;
+  completed_with?: CompletedWith;
 };
 
 export type NightCap = {
   uuid: string;
   date: string;
   reflection: string;
+  favorite_moment?: string;
+  has_favorite_photo?: boolean;
+  favorite_photo_url?: string | null;
   mood: string;
   status: "draft" | "completed";
   completed_at: string | null;
+  updated_at?: string;
   entries?: RitualEntry[];
 };
 
@@ -162,6 +175,34 @@ export type RitualResponse = {
   nightcap?: NightCap;
   entries: RitualEntry[];
   summary: Record<string, unknown>;
+};
+
+export type SharedRitualHint = {
+  category_uuid: string;
+  partner_username: string;
+  metric_kind: MetricKind;
+  unit: string;
+  amount: string | null;
+  quantity: string | null;
+  completed_with?: CompletedWith;
+};
+
+export type SharedRitualResponse = {
+  date: string;
+  partner_username: string | null;
+  shared_category_uuids: string[];
+  entries: SharedRitualHint[];
+};
+
+/** Per-category totals inside a calendar group day. */
+export type CalendarCategorySummary = {
+  name: string;
+  emoji: string;
+  unit: string;
+  metric_kind: MetricKind;
+  type: CategoryType;
+  amount: string;
+  quantity: string;
 };
 
 /** Per-group activity summary returned on calendar days. */
@@ -175,6 +216,7 @@ export type CalendarGroupSummary = {
   amount_total: string;
   quantity_total: string;
   category_emojis: string[];
+  categories?: CalendarCategorySummary[];
 };
 
 export type CalendarDay = {
@@ -185,6 +227,8 @@ export type CalendarDay = {
   nightcap_status?: string | null;
   /** NightCap mood emoji/string for the day (may be empty). */
   mood?: string;
+  has_favorite_photo?: boolean;
+  favorite_moment?: string;
   entry_count: number;
   expense_total: string;
   habit_count: number;
@@ -197,12 +241,61 @@ export type CalendarResponse = {
   days: CalendarDay[];
 };
 
+export type ChartQuantityUnit = {
+  unit: string;
+  total: string;
+};
+
 export type ChartPoint = {
   date?: string | null;
   week_start?: string | null;
   entry_count: number;
   expense_total: string;
   income_total: string;
+  together_count?: number;
+  alone_count?: number;
+  quantity_by_unit?: ChartQuantityUnit[];
+};
+
+export type ChartCategory = {
+  category_id?: number;
+  uuid?: string;
+  name?: string;
+  emoji?: string;
+  icon?: string;
+  type?: CategoryType;
+  metric_kind?: MetricKind;
+  unit?: string;
+  group_uuid?: string | null;
+  group_key?: string | null;
+  group_name?: string | null;
+  entry_count: number;
+  amount_total: string;
+  quantity_total: string;
+  together_count?: number;
+  alone_count?: number;
+  category__uuid?: string;
+  category__name?: string;
+  category__type?: string;
+};
+
+export type ChartGroup = {
+  uuid: string | null;
+  key: string | null;
+  name: string;
+  icon: string;
+  entry_count: number;
+  expense_total: string;
+  amount_total: string;
+  quantity_total: string;
+  together_count: number;
+  alone_count: number;
+  category_emojis: string[];
+};
+
+export type ChartTogether = {
+  together_count: number;
+  alone_count: number;
 };
 
 export type ChartResponse = {
@@ -210,7 +303,9 @@ export type ChartResponse = {
   start_date: string;
   end_date: string;
   points: ChartPoint[];
-  by_category: Record<string, unknown>[];
+  by_category: ChartCategory[];
+  by_group?: ChartGroup[];
+  together?: ChartTogether;
 };
 
 export type GoalProgress = {
@@ -264,4 +359,5 @@ export type CategoryGroupUpdateInput = Partial<{
 }>;
 
 export const SPEND_GROUP_KEY = "daily_spend";
+/** Stable key for the default Health group. */
 export const FOLLOW_UP_GROUP_KEY = "follow_up";

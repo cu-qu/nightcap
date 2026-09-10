@@ -28,6 +28,7 @@ class GoalTemplateAdmin(admin.ModelAdmin):
         "audience",
         "suggested_scope",
         "category_name",
+        "category_unit",
         "period",
         "direction",
         "target_value",

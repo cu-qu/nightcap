@@ -2,7 +2,6 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
   clampPercent,
-  formatGoalNumber,
   healthStyle,
   modePillLabel,
   uiHealth,
@@ -10,6 +9,7 @@ import {
 import { categoryGlyph } from "@/src/theme/iconMap";
 import { colors } from "@/src/theme/colors";
 import type { GroupGoalItem } from "@/src/types/goals";
+import { formatCategoryValue } from "@/src/utils/units";
 
 type Props = {
   goal: GroupGoalItem;
@@ -19,9 +19,8 @@ type Props = {
 export function GoalHealthPill({ goal, onPress }: Props) {
   const health = uiHealth(goal.health);
   const pill = healthStyle(health);
-  const kind = goal.category.metric_kind;
-  const current = formatGoalNumber(goal.current_value, kind);
-  const target = formatGoalNumber(goal.target_value, kind);
+  const current = formatCategoryValue(goal.current_value, goal.category);
+  const target = formatCategoryValue(goal.target_value, goal.category);
   const fill = clampPercent(goal.percent_used);
   const isOver = health === "over" || goal.percent_used > 100;
 
@@ -34,6 +33,7 @@ export function GoalHealthPill({ goal, onPress }: Props) {
         {categoryGlyph({
           emoji: goal.category.emoji,
           icon: goal.category.icon,
+          name: goal.category.name || goal.display_name,
         })}
       </Text>
       <View style={styles.body}>

@@ -140,6 +140,7 @@ export const emojiCatalog: { emoji: string; label: string }[] = [
   { emoji: "🎉", label: "Party" },
   { emoji: "🥳", label: "Celebrate" },
   { emoji: "💬", label: "Chat" },
+  { emoji: "🌹", label: "Rose" },
   { emoji: "❤️", label: "Heart" },
   { emoji: "🫶", label: "Care" },
   { emoji: "😊", label: "Smile" },
@@ -178,7 +179,8 @@ export const emojiOptions = emojiCatalog;
 export const emojiByKey: Record<string, string> = {
   // Groups
   spend: "💵",
-  follow_up: "✨",
+  follow_up: "💪",
+  health: "💪",
   // Categories
   fast_food: "🍔",
   eating_out: "🍽️",
@@ -200,9 +202,12 @@ export const emojiByKey: Record<string, string> = {
   "figure.core.training": "🤸",
   online_shopping: "🛍️",
   going_out: "🎉",
+  date_night: "🌹",
   invested: "💰",
   read: "📖",
   run_workout: "🏃",
+  running: "🏃",
+  biking: "🚴",
   sauna_meditation: "🧘",
   custom: "✨",
   habit: "🎯",

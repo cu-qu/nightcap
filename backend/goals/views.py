@@ -72,7 +72,7 @@ class GoalViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return Goal.objects.none()
         qs = Goal.objects.filter(user=self.request.user).select_related(
-            "category", "category__group"
+            "category", "category__group", "partnership"
         )
         category_uuid = self.request.query_params.get("category_uuid")
         if category_uuid:
@@ -120,7 +120,7 @@ class GoalViewSet(viewsets.ModelViewSet):
         tags=["Goals"],
         summary="Category-group goal health summary",
         description=(
-            "Active goals grouped by category group (Daily Spend, Follow-up, …) with "
+            "Active goals grouped by category group (Daily Spend, Health, …) with "
             "simple health: healthy | close | behind | passed | over, and mode: "
             "stay_under | pass | completed. "
             "`period=monthly` includes weekly goals rolled into the month "

@@ -1,44 +1,54 @@
-import { Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
-import type { ChartPoint } from "@/src/types/api";
+import { colors } from "@/src/theme/colors";
 
-type Props = {
-  points: ChartPoint[];
-  period: "daily" | "weekly";
+export type ChartBarDatum = {
+  key: string;
+  label: string;
+  value: number;
+  display: string;
 };
 
-export function ChartBars({ points, period }: Props) {
-  if (!points.length) {
+type Props = {
+  points: ChartBarDatum[];
+  color?: string;
+  emptyLabel?: string;
+};
+
+export function ChartBars({
+  points,
+  color = colors.accent,
+  emptyLabel = "No chart data yet",
+}: Props) {
+  const hasValue = points.some((p) => p.value > 0);
+  if (!points.length || !hasValue) {
     return (
-      <View className="items-center rounded-2xl border border-night-border bg-night-surface py-12">
-        <Text className="text-night-muted">No chart data yet</Text>
+      <View style={styles.empty}>
+        <Text style={styles.emptyText}>{emptyLabel}</Text>
       </View>
     );
   }
 
-  const values = points.map((p) => Number(p.expense_total) || 0);
-  const max = Math.max(...values, 1);
+  const max = Math.max(...points.map((p) => p.value), 1);
+  const showValueLabels = points.length <= 16;
 
   return (
-    <View className="rounded-2xl border border-night-border bg-night-surface p-4">
-      <View className="h-44 flex-row items-end justify-between">
-        {points.map((p, i) => {
-          const value = values[i];
-          const height = Math.max(4, (value / max) * 140);
-          const label =
-            period === "weekly"
-              ? (p.week_start ?? "").slice(5)
-              : (p.date ?? "").slice(8);
+    <View style={styles.card}>
+      <View style={styles.row}>
+        {points.map((p) => {
+          const height = Math.max(4, (p.value / max) * 140);
           return (
-            <View key={`${label}-${i}`} className="mx-0.5 flex-1 items-center">
-              <Text className="mb-1 text-[10px] text-night-muted">
-                {value > 0 ? value.toFixed(0) : ""}
+            <View key={p.key} style={styles.col}>
+              <Text style={styles.value} numberOfLines={1}>
+                {showValueLabels && p.value > 0 ? p.display : p.value === max ? p.display : ""}
               </Text>
               <View
-                className="w-full max-w-[28px] rounded-t-md bg-accent"
-                style={{ height }}
+                style={[
+                  styles.bar,
+                  { height, backgroundColor: color },
+                ]}
               />
-              <Text className="mt-2 text-[10px] text-night-muted">{label}</Text>
+              <Text style={styles.label}>{p.label}</Text>
             </View>
           );
         })}
@@ -46,3 +56,56 @@ export function ChartBars({ points, period }: Props) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
+  empty: {
+    alignItems: "center",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingVertical: 48,
+    paddingHorizontal: 16,
+  },
+  emptyText: {
+    color: colors.muted,
+    fontSize: 14,
+  },
+  row: {
+    height: 176,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+  },
+  col: {
+    flex: 1,
+    alignItems: "center",
+    marginHorizontal: 1,
+  },
+  value: {
+    marginBottom: 4,
+    fontSize: 9,
+    fontWeight: "700",
+    color: colors.muted,
+  },
+  bar: {
+    width: "100%",
+    maxWidth: 28,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+  },
+  label: {
+    marginTop: 6,
+    fontSize: 9,
+    color: colors.muted,
+  },
+});

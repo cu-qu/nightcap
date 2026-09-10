@@ -17,7 +17,7 @@ import { useGoalsStore } from "@/src/store/goalsStore";
 import { useGroupsStore } from "@/src/store/groupsStore";
 import { colors } from "@/src/theme/colors";
 import { iconFor } from "@/src/theme/iconMap";
-import type { GoalPeriod } from "@/src/types/goals";
+import type { GoalPeriod, GroupGoalItem } from "@/src/types/goals";
 
 export default function GoalsScreen() {
   const summary = useGoalsStore((s) => s.summary);
@@ -32,6 +32,7 @@ export default function GoalsScreen() {
   const refreshGroups = useGroupsStore((s) => s.refresh);
 
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<GroupGoalItem | null>(null);
   const [preferredGroupKey, setPreferredGroupKey] = useState<string | null>(
     null
   );
@@ -51,8 +52,20 @@ export default function GoalsScreen() {
   }
 
   function openSheet(groupKey?: string | null) {
+    setEditingGoal(null);
     setPreferredGroupKey(groupKey ?? null);
     setSheetOpen(true);
+  }
+
+  function openEdit(goal: GroupGoalItem) {
+    setPreferredGroupKey(null);
+    setEditingGoal(goal);
+    setSheetOpen(true);
+  }
+
+  function closeSheet() {
+    setSheetOpen(false);
+    setEditingGoal(null);
   }
 
   const counts = summary?.counts;
@@ -63,7 +76,8 @@ export default function GoalsScreen() {
         visible={sheetOpen}
         initialPeriod={periodFilter}
         preferredGroupKey={preferredGroupKey}
-        onClose={() => setSheetOpen(false)}
+        existingGoal={editingGoal}
+        onClose={closeSheet}
         onSubmit={async (input) => {
           await setGoal(input);
         }}
@@ -144,6 +158,7 @@ export default function GoalsScreen() {
                 <GoalHealthCard
                   key={goal.uuid}
                   goal={goal}
+                  onEdit={openEdit}
                   onDelete={(g) => void deactivateGoal(g.id)}
                 />
               ))

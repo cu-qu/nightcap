@@ -11,12 +11,17 @@ DEFAULT_GROUPS = [
     },
     {
         "key": CategoryGroup.KEY_FOLLOW_UP,
-        "name": "Follow-up",
+        "name": "Health",
         "sort_order": 1,
-        "icon": "follow_up",
+        "icon": "health",
         "show_in_ritual": True,
     },
 ]
+
+# Display names we used to seed; rename these in place if the user never customized.
+_LEGACY_DEFAULT_GROUP_NAMES = {
+    CategoryGroup.KEY_FOLLOW_UP: "Follow-up",
+}
 
 
 # Mobile NightCap ritual defaults. `icon` = stable key; `emoji` = saved display glyph.
@@ -132,44 +137,24 @@ DEFAULT_CATEGORIES = [
         "sort_order": 10,
     },
     {
-        "name": "I Invested",
-        "type": TrackingCategory.FINANCE_INCOME,
-        "icon": "invested",
-        "emoji": "💰",
-        "metric_kind": TrackingCategory.METRIC_AMOUNT,
-        "unit": "usd",
+        "name": "Water",
+        "type": TrackingCategory.HABIT,
+        "icon": "drop",
+        "emoji": "💧",
+        "metric_kind": TrackingCategory.METRIC_QUANTITY,
+        "unit": "glasses",
         "group_key": CategoryGroup.KEY_FOLLOW_UP,
         "sort_order": 0,
     },
     {
-        "name": "I Read",
-        "type": TrackingCategory.HABIT,
-        "icon": "read",
-        "emoji": "📖",
-        "metric_kind": TrackingCategory.METRIC_QUANTITY,
-        "unit": "minutes",
-        "group_key": CategoryGroup.KEY_FOLLOW_UP,
-        "sort_order": 1,
-    },
-    {
-        "name": "I Ran / Worked Out",
+        "name": "Workout",
         "type": TrackingCategory.FITNESS,
         "icon": "run_workout",
-        "emoji": "🏃",
+        "emoji": "🏋️",
         "metric_kind": TrackingCategory.METRIC_QUANTITY,
-        "unit": "km",
+        "unit": "sessions",
         "group_key": CategoryGroup.KEY_FOLLOW_UP,
-        "sort_order": 2,
-    },
-    {
-        "name": "Sauna / Meditation",
-        "type": TrackingCategory.HABIT,
-        "icon": "sauna_meditation",
-        "emoji": "🧘",
-        "metric_kind": TrackingCategory.METRIC_BOOLEAN,
-        "unit": "count",
-        "group_key": CategoryGroup.KEY_FOLLOW_UP,
-        "sort_order": 3,
+        "sort_order": 1,
     },
 ]
 
@@ -197,7 +182,7 @@ def _category_fields(item: dict) -> dict:
 def create_default_groups_for_user(user) -> dict[str, CategoryGroup]:
     groups_by_key: dict[str, CategoryGroup] = {}
     for item in DEFAULT_GROUPS:
-        group, _ = CategoryGroup.objects.get_or_create(
+        group, created = CategoryGroup.objects.get_or_create(
             user=user,
             key=item["key"],
             defaults={
@@ -208,6 +193,26 @@ def create_default_groups_for_user(user) -> dict[str, CategoryGroup]:
                 "is_default": True,
             },
         )
+        if not created:
+            updates = []
+            legacy_name = _LEGACY_DEFAULT_GROUP_NAMES.get(item["key"])
+            if (
+                legacy_name
+                and group.name == legacy_name
+                and not CategoryGroup.objects.filter(
+                    user=user, name=item["name"]
+                )
+                .exclude(pk=group.pk)
+                .exists()
+            ):
+                group.name = item["name"]
+                updates.append("name")
+            if group.is_default and item.get("icon") and group.icon in ("", "follow_up"):
+                group.icon = item["icon"]
+                updates.append("icon")
+            if updates:
+                updates.append("updated_at")
+                group.save(update_fields=list(dict.fromkeys(updates)))
         groups_by_key[group.key] = group
     return groups_by_key
 

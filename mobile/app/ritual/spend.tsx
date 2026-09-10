@@ -12,19 +12,29 @@ import {
 } from "react-native";
 
 import { getNightCap } from "@/src/api/nightcaps";
+import { getSharedRitual } from "@/src/api/ritual";
 import { MoodPicker } from "@/src/components/MoodPicker";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { RitualCategoryField } from "@/src/components/RitualCategoryField";
+import { RitualMomentsSection } from "@/src/components/RitualMomentsSection";
 import { ShootingStarTransition } from "@/src/components/ShootingStarTransition";
 import { enqueueRitual } from "@/src/db/sync";
+import { useAuthStore } from "@/src/store/authStore";
 import { useGroupsStore } from "@/src/store/groupsStore";
 import { useRitualDraftStore } from "@/src/store/ritualDraftStore";
 import { colors } from "@/src/theme/colors";
 import { iconFor } from "@/src/theme/iconMap";
-import type { Category, RitualCategoryGroup } from "@/src/types/api";
+import type {
+  Category,
+  RitualCategoryGroup,
+  SharedRitualHint,
+  SharedRitualResponse,
+} from "@/src/types/api";
 import { formatDisplayDate, isFutureIsoDate } from "@/src/utils/date";
+import { categorySupportsCompletedWith } from "@/src/utils/ritualCategories";
 
 const WRAP_TAB = "__wrap__";
+const MOMENTS_TAB = "__moments__";
 
 function sortedCategories(group: RitualCategoryGroup): Category[] {
   return [...group.categories].sort(
@@ -45,16 +55,30 @@ export default function NightCapEntryScreen() {
   const spendValues = useRitualDraftStore((s) => s.spendValues);
   const habitValues = useRitualDraftStore((s) => s.habitValues);
   const booleanValues = useRitualDraftStore((s) => s.booleanValues);
+  const completedWith = useRitualDraftStore((s) => s.completedWith);
   const mood = useRitualDraftStore((s) => s.mood);
   const reflection = useRitualDraftStore((s) => s.reflection);
+  const favoriteMoment = useRitualDraftStore((s) => s.favoriteMoment);
+  const favoritePhotoUri = useRitualDraftStore((s) => s.favoritePhotoUri);
+  const hasRemotePhoto = useRitualDraftStore((s) => s.hasRemotePhoto);
   const setCategoryValue = useRitualDraftStore((s) => s.setCategoryValue);
+  const setCompletedWith = useRitualDraftStore((s) => s.setCompletedWith);
   const setMood = useRitualDraftStore((s) => s.setMood);
   const setReflection = useRitualDraftStore((s) => s.setReflection);
+  const setFavoriteMoment = useRitualDraftStore((s) => s.setFavoriteMoment);
+  const setFavoritePhoto = useRitualDraftStore((s) => s.setFavoritePhoto);
+  const clearFavoritePhoto = useRitualDraftStore((s) => s.clearFavoritePhoto);
+  const applySavedNightCap = useRitualDraftStore((s) => s.applySavedNightCap);
   const buildRitualPayload = useRitualDraftStore((s) => s.buildRitualPayload);
   const clear = useRitualDraftStore((s) => s.clear);
   const [saving, setSaving] = useState(false);
   const [starVisible, setStarVisible] = useState(false);
+  const [ready, setReady] = useState(false);
   const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [sharedRitual, setSharedRitual] = useState<SharedRitualResponse | null>(
+    null
+  );
+  const hasPartner = !!useAuthStore((s) => s.user?.partnership);
 
   function valueFor(cat: Category): string | boolean {
     if (cat.metric_kind === "boolean") return !!booleanValues[cat.uuid];
@@ -76,7 +100,7 @@ export default function NightCapEntryScreen() {
   );
 
   const tabIds = useMemo(
-    () => [...groups.map((g) => g.uuid), WRAP_TAB],
+    () => [...groups.map((g) => g.uuid), MOMENTS_TAB, WRAP_TAB],
     [groups]
   );
 
@@ -91,7 +115,8 @@ export default function NightCapEntryScreen() {
   }, [tabIds, activeTab]);
 
   const isWrap = activeTab === WRAP_TAB;
-  const activeGroup = isWrap
+  const isMoments = activeTab === MOMENTS_TAB;
+  const activeGroup = isWrap || isMoments
     ? null
     : (groups.find((g) => g.uuid === activeTab) ?? groups[0] ?? null);
   const activeCats = activeGroup ? sortedCategories(activeGroup) : [];
@@ -100,23 +125,52 @@ export default function NightCapEntryScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshRitual();
-      if (!ritualGroups.length) void refresh();
-      // Prefill mood/reflection when editing an existing NightCap.
+      let cancelled = false;
+      setReady(false);
       void (async () => {
         try {
+          await refreshRitual();
+          if (cancelled) return;
           const nc = await getNightCap(date);
-          if (nc.mood) setMood(nc.mood);
-          if (nc.reflection) setReflection(nc.reflection);
+          if (cancelled) return;
+          const categories = useGroupsStore
+            .getState()
+            .ritualGroups.flatMap((g) => g.categories);
+          applySavedNightCap(nc, categories);
         } catch {
           // No nightcap yet for this date.
+        } finally {
+          if (!cancelled) setReady(true);
         }
       })();
-    }, [date, refresh, refreshRitual, ritualGroups.length, setMood, setReflection])
+      void (async () => {
+        try {
+          const shared = await getSharedRitual(date);
+          if (!cancelled) setSharedRitual(shared);
+        } catch {
+          if (!cancelled) setSharedRitual(null);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [date, refresh, refreshRitual, applySavedNightCap])
   );
 
+  const togetherIds = useMemo(
+    () => new Set(sharedRitual?.shared_category_uuids ?? []),
+    [sharedRitual]
+  );
+  const partnerHintByCategory = useMemo(() => {
+    const map = new Map<string, SharedRitualHint>();
+    for (const hint of sharedRitual?.entries ?? []) {
+      map.set(hint.category_uuid, hint);
+    }
+    return map;
+  }, [sharedRitual]);
+
   async function onSave() {
-    if (saving || starVisible) return;
+    if (saving || starVisible || !ready) return;
     if (isFutureIsoDate(date)) {
       Alert.alert(
         "Future date",
@@ -162,6 +216,11 @@ export default function NightCapEntryScreen() {
   }
 
   const wrapFilled = !!(mood || reflection.trim());
+  const momentsFilled = !!(
+    favoriteMoment.trim() ||
+    favoritePhotoUri ||
+    hasRemotePhoto
+  );
 
   return (
     <Screen>
@@ -217,6 +276,20 @@ export default function NightCapEntryScreen() {
           );
         })}
         <Pressable
+          onPress={() => setActiveTab(MOMENTS_TAB)}
+          style={[styles.tab, isMoments && styles.tabOn]}
+        >
+          <Text style={styles.tabEmoji}>✨</Text>
+          <Text style={[styles.tabLabel, isMoments && styles.tabLabelOn]}>
+            Moments
+          </Text>
+          {momentsFilled ? (
+            <View style={[styles.badge, isMoments && styles.badgeOn]}>
+              <Text style={styles.badgeText}>✓</Text>
+            </View>
+          ) : null}
+        </Pressable>
+        <Pressable
           onPress={() => setActiveTab(WRAP_TAB)}
           style={[styles.tab, isWrap && styles.tabOn]}
         >
@@ -237,7 +310,7 @@ export default function NightCapEntryScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {activeGroup && !isWrap ? (
+        {activeGroup && !isWrap && !isMoments ? (
           <>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionEmoji}>
@@ -257,10 +330,30 @@ export default function NightCapEntryScreen() {
                   category={cat}
                   value={valueFor(cat)}
                   onChange={(v) => setCategoryValue(cat, v)}
+                  together={togetherIds.has(cat.uuid)}
+                  partnerHint={partnerHintByCategory.get(cat.uuid) ?? null}
+                  showCompletedWith={
+                    hasPartner && categorySupportsCompletedWith(cat)
+                  }
+                  completedWith={completedWith[cat.uuid] ?? "alone"}
+                  onCompletedWithChange={(v) => setCompletedWith(cat.uuid, v)}
                 />
               ))
             )}
           </>
+        ) : null}
+
+        {isMoments ? (
+          <RitualMomentsSection
+            date={date}
+            favoriteMoment={favoriteMoment}
+            onChangeMoment={setFavoriteMoment}
+            localPhotoUri={favoritePhotoUri}
+            hasRemotePhoto={hasRemotePhoto}
+            photoCacheKey={date}
+            onPickedPhoto={setFavoritePhoto}
+            onClearPhoto={clearFavoritePhoto}
+          />
         ) : null}
 
         {isWrap ? (
@@ -287,7 +380,7 @@ export default function NightCapEntryScreen() {
           </View>
         ) : null}
 
-        {!loading && !groups.length && !isWrap ? (
+        {!loading && !groups.length && !isWrap && !isMoments ? (
           <Text style={styles.empty}>
             No active groups for NightCap. You can still wrap up with mood and
             reflection — or turn on groups in Settings → Categories & Groups.
@@ -301,13 +394,15 @@ export default function NightCapEntryScreen() {
           <PrimaryButton
             title="Save NightCap"
             onPress={() => void onSave()}
-            loading={saving}
+            loading={saving || !ready}
             variant={!isLastTab ? "secondary" : "primary"}
           />
           <Text style={styles.hint}>
             {isWrap
               ? "Mood and reflection save with your NightCap"
-              : "Switch tabs anytime · Save submits everything"}
+              : isMoments
+                ? "Photo uploads with Save NightCap"
+                : "Switch tabs anytime · Save submits everything"}
           </Text>
         </View>
       </ScrollView>

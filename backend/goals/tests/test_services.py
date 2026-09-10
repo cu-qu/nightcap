@@ -8,7 +8,7 @@ from accounts.models import User
 from categories.models import TrackingCategory
 from entries.models import Entry
 from goals.models import Goal
-from goals.services import compute_goal_progress
+from goals.services import combine_shared_day_values, compute_goal_progress
 
 
 class GoalProgressTests(TestCase):
@@ -157,3 +157,34 @@ class GoalProgressTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(resp.json()), 1)
         self.assertEqual(resp.json()[0]["category_name"], "Eating Out")
+
+
+class CombineSharedDayValuesTests(TestCase):
+    def test_both_with_partner_counts_once(self):
+        entries = [
+            Entry(quantity=Decimal("1"), completed_with=Entry.COMPLETED_WITH_PARTNER),
+            Entry(quantity=Decimal("1"), completed_with=Entry.COMPLETED_WITH_PARTNER),
+        ]
+        self.assertEqual(
+            combine_shared_day_values(entries, TrackingCategory.METRIC_QUANTITY),
+            Decimal("1"),
+        )
+
+    def test_mixed_alone_and_partner_sums(self):
+        entries = [
+            Entry(quantity=Decimal("1"), completed_with=Entry.COMPLETED_WITH_PARTNER),
+            Entry(quantity=Decimal("1"), completed_with=Entry.COMPLETED_ALONE),
+        ]
+        self.assertEqual(
+            combine_shared_day_values(entries, TrackingCategory.METRIC_QUANTITY),
+            Decimal("2"),
+        )
+
+    def test_single_with_partner_counts_full_value(self):
+        entries = [
+            Entry(quantity=Decimal("2"), completed_with=Entry.COMPLETED_WITH_PARTNER),
+        ]
+        self.assertEqual(
+            combine_shared_day_values(entries, TrackingCategory.METRIC_QUANTITY),
+            Decimal("2"),
+        )
