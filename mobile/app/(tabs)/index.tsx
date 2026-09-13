@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import { fetchCalendar } from "@/src/api/calendar";
+import { fetchRecapIndex } from "@/src/api/recaps";
 import { GoalsSnapshot } from "@/src/components/GoalsSnapshot";
 import { MoonRiseTransition } from "@/src/components/MoonRiseTransition";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
@@ -18,6 +19,7 @@ import { useAuthStore } from "@/src/store/authStore";
 import { useGoalsStore } from "@/src/store/goalsStore";
 import { useRitualDraftStore } from "@/src/store/ritualDraftStore";
 import { colors } from "@/src/theme/colors";
+import type { RecapIndexResponse } from "@/src/types/api";
 import {
   formatFullDisplayDate,
   todayIso,
@@ -30,6 +32,7 @@ export default function HomeScreen() {
   const loadGoals = useGoalsStore((s) => s.load);
   const goalsPeriod = useGoalsStore((s) => s.period);
   const today = todayIso();
+  const [recaps, setRecaps] = useState<RecapIndexResponse | null>(null);
 
   const [hasTodayNightCap, setHasTodayNightCap] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -43,6 +46,12 @@ export default function HomeScreen() {
     const month = now.getMonth() + 1;
 
     await loadGoals(goalsPeriod);
+
+    try {
+      setRecaps(await fetchRecapIndex());
+    } catch {
+      setRecaps(null);
+    }
 
     const cached = await loadCachedCalendar(year, month);
     try {
@@ -161,6 +170,54 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
+        {recaps?.featured_month || recaps?.featured_year ? (
+          <View style={styles.recapCard}>
+            <Text style={styles.ritualEyebrow}>Look back</Text>
+            <Text style={styles.recapTitle}>
+              {recaps.featured_month
+                ? `${recaps.featured_month.title} Recap`
+                : `${recaps.featured_year?.title} Recap`}
+            </Text>
+            <Text style={styles.ritualBody}>
+              Photos, favorite moments, and what you logged last
+              {recaps.featured_year && !recaps.featured_month
+                ? " year"
+                : " month"}
+              . Available here for the first week.
+            </Text>
+            {recaps.featured_month ? (
+              <PrimaryButton
+                title={`Open ${recaps.featured_month.title}`}
+                onPress={() =>
+                  router.push({
+                    pathname: "/recap/month",
+                    params: {
+                      year: String(recaps.featured_month!.year),
+                      month: String(recaps.featured_month!.month),
+                    },
+                  })
+                }
+              />
+            ) : null}
+            {recaps.featured_year ? (
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/recap/year",
+                    params: { year: String(recaps.featured_year!.year) },
+                  })
+                }
+                style={styles.secondaryLink}
+                hitSlop={8}
+              >
+                <Text style={styles.secondaryLinkText}>
+                  {recaps.featured_year.title} Year Recap
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
         <GoalsSnapshot />
       </ScrollView>
     </Screen>
@@ -228,5 +285,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: colors.accentSoft,
+  },
+  recapCard: {
+    marginTop: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 20,
+  },
+  recapTitle: {
+    marginTop: 8,
+    fontSize: 24,
+    fontWeight: "700",
+    color: colors.text,
   },
 });

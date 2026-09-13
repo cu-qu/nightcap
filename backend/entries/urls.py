@@ -9,6 +9,9 @@ from .views import (
     EntryViewSet,
     ExportView,
     NightCapViewSet,
+    RecapIndexView,
+    RecapMonthView,
+    RecapYearView,
     RitualSharedView,
     RitualView,
 )
@@ -29,5 +32,8 @@ urlpatterns = [
     ),
     path("calendar/", CalendarView.as_view(), name="calendar"),
     path("charts/", ChartsView.as_view(), name="charts"),
+    path("recaps/month/", RecapMonthView.as_view(), name="recap-month"),
+    path("recaps/year/", RecapYearView.as_view(), name="recap-year"),
+    path("recaps/", RecapIndexView.as_view(), name="recap-index"),
 ]
 urlpatterns += router.urls

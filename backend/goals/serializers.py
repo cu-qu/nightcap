@@ -212,6 +212,7 @@ class GoalSerializer(serializers.ModelSerializer):
             "partnership",
             "partnership_uuid",
             "template_slug",
+            "accepted",
             "is_active",
             "progress",
             "created_at",
@@ -224,6 +225,7 @@ class GoalSerializer(serializers.ModelSerializer):
             "category_detail",
             "partnership",
             "partnership_uuid",
+            "accepted",
             "progress",
             "created_at",
             "updated_at",
@@ -337,6 +339,11 @@ class GoalSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         self._apply_scope_partnership(validated_data)
+        if validated_data.get("scope") == Goal.SCOPE_SHARED:
+            request = self.context.get("request")
+            validated_data.setdefault("accepted", True)
+            if request is not None:
+                validated_data.setdefault("proposed_by", request.user)
         goal = super().create(validated_data)
         if goal.scope == Goal.SCOPE_SHARED:
             from goals.onboarding_services import mirror_shared_goal

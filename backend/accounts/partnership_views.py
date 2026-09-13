@@ -4,10 +4,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.permissions import HasActiveMembership
+
 from accounts.partnerships import (
     accept_invite_code,
     ensure_partnership,
     get_user_partnership,
+    leave_partnership,
     regenerate_invite_code,
     send_partner_invite,
     serialize_partnership,
@@ -17,6 +20,11 @@ from accounts.serializers import MessageSerializer, PartnershipInviteSerializer,
 
 class PartnershipView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), HasActiveMembership()]
 
     @extend_schema(
         tags=["Partnership"],
@@ -37,7 +45,7 @@ class PartnershipView(APIView):
 
 
 class PartnershipInviteView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     @extend_schema(
         tags=["Partnership"],
@@ -69,7 +77,7 @@ class PartnershipInviteView(APIView):
 
 
 class PartnershipJoinView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     @extend_schema(
         tags=["Partnership"],
@@ -83,8 +91,26 @@ class PartnershipJoinView(APIView):
         return Response({"partnership": serialize_partnership(partnership)})
 
 
-class PartnershipRegenerateCodeView(APIView):
+class PartnershipLeaveView(APIView):
     permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Partnership"],
+        summary="Unlink from couple space",
+        description=(
+            "Leaves the current partnership. Together goals become personal. "
+            "If a partner remains, they keep the couple space with a new invite code."
+        ),
+        request=None,
+        responses={200: MessageSerializer},
+    )
+    def post(self, request):
+        leave_partnership(request.user)
+        return Response({"partnership": None})
+
+
+class PartnershipRegenerateCodeView(APIView):
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     @extend_schema(
         tags=["Partnership"],

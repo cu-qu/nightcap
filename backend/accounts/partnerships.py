@@ -66,6 +66,9 @@ def ensure_partnership(user) -> Partnership:
         if profile.tracking_mode != UserProfile.MODE_COUPLE:
             profile.tracking_mode = UserProfile.MODE_COUPLE
             profile.save(update_fields=["tracking_mode", "updated_at"])
+    from accounts.memberships import attach_membership_to_partnership
+
+    attach_membership_to_partnership(user, partnership)
     return partnership
 
 
@@ -96,6 +99,80 @@ def send_partner_invite(partnership: Partnership, invited_by, email: str) -> Par
     return invite
 
 
+def abandon_unpaired_partnership(user) -> None:
+    """Drop a 1-person couple space so the user can join someone else's code."""
+    existing = get_user_partnership(user)
+    if existing is None:
+        return
+    if existing.members.count() >= 2:
+        raise ValidationError(
+            {"invite_code": "You're already connected with a partner on NightCap."}
+        )
+    from accounts.memberships import detach_membership_to_user
+
+    detach_membership_to_user(user)
+    partnership_id = existing.id
+    PartnershipMember.objects.filter(user=user, partnership=existing).delete()
+    if not PartnershipMember.objects.filter(partnership_id=partnership_id).exists():
+        Partnership.objects.filter(id=partnership_id).delete()
+
+
+def _personalize_partnership_goals(partnership: Partnership) -> None:
+    """Together goals stop rolling up once the couple is no longer linked."""
+    from goals.models import Goal
+
+    now = timezone.now()
+    Goal.objects.filter(
+        partnership=partnership,
+        scope=Goal.SCOPE_SHARED,
+        accepted=False,
+    ).update(is_active=False, partnership=None, updated_at=now)
+    Goal.objects.filter(partnership=partnership).update(
+        scope=Goal.SCOPE_PERSONAL,
+        partnership=None,
+        proposed_by=None,
+        accepted=True,
+        updated_at=now,
+    )
+
+
+def leave_partnership(user) -> None:
+    """Unlink from the current couple space. The other person keeps waiting with a new code."""
+    existing = get_user_partnership(user)
+    if existing is None:
+        raise ValidationError("You're not in a couple space.")
+
+    with transaction.atomic():
+        from accounts.memberships import detach_membership_to_user
+
+        detach_membership_to_user(user)
+        _personalize_partnership_goals(existing)
+        remaining = list(
+            PartnershipMember.objects.filter(partnership=existing).exclude(user=user)
+        )
+        PartnershipMember.objects.filter(user=user, partnership=existing).delete()
+        PartnershipInvite.objects.filter(
+            partnership=existing,
+            accepted_at__isnull=True,
+        ).delete()
+
+        profile, _ = UserProfile.objects.get_or_create(
+            user=user,
+            defaults={"preferred_language": user.preferred_language},
+        )
+        if profile.tracking_mode != UserProfile.MODE_SOLO:
+            profile.tracking_mode = UserProfile.MODE_SOLO
+            profile.save(update_fields=["tracking_mode", "updated_at"])
+
+        if remaining:
+            PartnershipMember.objects.filter(id=remaining[0].id).update(
+                role=PartnershipMember.ROLE_OWNER
+            )
+            regenerate_invite_code(existing)
+        else:
+            Partnership.objects.filter(id=existing.id).delete()
+
+
 def accept_invite_code(user, code: str) -> Partnership:
     normalized = (code or "").strip().upper().replace(" ", "").replace("-", "")
     if not normalized:
@@ -109,14 +186,16 @@ def accept_invite_code(user, code: str) -> Partnership:
     if existing is not None:
         if existing.id == partnership.id:
             return existing
-        raise ValidationError(
-            {"invite_code": "You're already connected with a partner on NightCap."}
-        )
+        if existing.members.count() >= 2:
+            raise ValidationError(
+                {"invite_code": "You're already connected with a partner on NightCap."}
+            )
 
     if partnership.members.count() >= 2:
         raise ValidationError({"invite_code": "This couple already has two people."})
 
     with transaction.atomic():
+        abandon_unpaired_partnership(user)
         PartnershipMember.objects.create(
             partnership=partnership,
             user=user,
@@ -134,7 +213,10 @@ def accept_invite_code(user, code: str) -> Partnership:
             accepted_at__isnull=True,
         ).update(accepted_at=timezone.now(), accepted_by=user)
 
+    from accounts.memberships import attach_membership_to_partnership
     from goals.onboarding_services import copy_shared_goals_to_user
+
+    attach_membership_to_partnership(user, partnership)
 
     copy_shared_goals_to_user(partnership, user)
     return partnership

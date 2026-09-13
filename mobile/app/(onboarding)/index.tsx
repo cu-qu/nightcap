@@ -16,8 +16,15 @@ import {
   fetchOnboardingStatus,
   fetchOnboardingTemplates,
   setupOnboarding,
+  type TogetherGoal,
 } from "@/src/api/onboarding";
-import { ensurePartnership, invitePartner } from "@/src/api/partnership";
+import {
+  ensurePartnership,
+  invitePartner,
+  joinPartnership,
+  normalizeInviteCode,
+  formatInviteCodeInput,
+} from "@/src/api/partnership";
 import { ReminderTimePicker } from "@/src/components/ReminderTimePicker";
 import { MovementPicker } from "@/src/components/onboarding/MovementPicker";
 import {
@@ -27,6 +34,7 @@ import {
   type SpendPeriod,
 } from "@/src/components/onboarding/SpendLimitPicker";
 import { TemplatePicker } from "@/src/components/onboarding/TemplatePicker";
+import { TogetherGoalsReview } from "@/src/components/onboarding/TogetherGoalsReview";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { formatReminderTime } from "@/src/notifications/reminders";
 import { useAuthStore } from "@/src/store/authStore";
@@ -34,10 +42,24 @@ import { useCategoriesStore } from "@/src/store/categoriesStore";
 import { useGroupsStore } from "@/src/store/groupsStore";
 import { useReminderStore } from "@/src/store/reminderStore";
 import { colors } from "@/src/theme/colors";
-import type { GoalScope, GoalTemplate, GoalTemplateGroup } from "@/src/types/api";
+import type {
+  GoalScope,
+  GoalTemplate,
+  GoalTemplateGroup,
+  Partnership,
+} from "@/src/types/api";
 
 type Mode = "solo" | "couple";
-type Step = "mode" | "invite" | "finance" | "fitness" | "habit" | "remind";
+type Step = "mode" | "invite" | "together" | "finance" | "fitness" | "habit" | "remind";
+
+function otherMember(partnership: Partnership | null | undefined, username?: string) {
+  if (!partnership) return undefined;
+  return partnership.members.find((member) => member.username !== username);
+}
+
+function isLinked(partnership: Partnership | null | undefined, username?: string) {
+  return !!otherMember(partnership, username) || !!partnership?.is_full;
+}
 
 const STEP_COPY: Record<
   Exclude<Step, "mode" | "invite" | "remind">,
@@ -67,7 +89,8 @@ export default function OnboardingScreen() {
   const enableReminders = useReminderStore((s) => s.enable);
   const saveReminderTime = useReminderStore((s) => s.setTime);
 
-  const alreadyPaired = !!user?.partnership;
+  const alreadyPaired = isLinked(user?.partnership, user?.username);
+  const [startedPaired] = useState(alreadyPaired);
   const [step, setStep] = useState<Step>(alreadyPaired ? "finance" : "mode");
   const [mode, setMode] = useState<Mode>(
     alreadyPaired || user?.tracking_mode === "couple" ? "couple" : "solo"
@@ -77,8 +100,14 @@ export default function OnboardingScreen() {
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [periods, setPeriods] = useState<Record<string, SpendPeriod | "daily">>({});
   const [locked, setLocked] = useState<Set<string>>(new Set());
+  const [togetherGoals, setTogetherGoals] = useState<TogetherGoal[]>([]);
+  const [approvedTogether, setApprovedTogether] = useState<Set<string>>(new Set());
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteCode, setInviteCode] = useState(user?.partnership?.invite_code ?? "");
+  const [partnerCode, setPartnerCode] = useState("");
+  const [linkedName, setLinkedName] = useState(
+    otherMember(user?.partnership, user?.username)?.username ?? ""
+  );
   const [emailSent, setEmailSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,17 +121,13 @@ export default function OnboardingScreen() {
         if (status.partnership) {
           setMode("couple");
           setInviteCode(status.partnership.invite_code);
-          setStep((current) => (current === "mode" ? "finance" : current));
+          const other = otherMember(status.partnership, user?.username);
+          if (other) setLinkedName(other.username);
+          if (isLinked(status.partnership, user?.username)) {
+            setStep((current) => (current === "mode" ? "finance" : current));
+          }
         }
-        const inherited = new Set(status.inherited_shared_templates);
-        if (inherited.size) {
-          setLocked(inherited);
-          setSelected((prev) => {
-            const next = { ...prev };
-            for (const slug of inherited) next[slug] = "shared";
-            return next;
-          });
-        }
+        applyTogetherFromStatus(status.together_goals ?? []);
       } catch {
         // first-run users may not have status yet
       }
@@ -170,6 +195,57 @@ export default function OnboardingScreen() {
 
   const couple = mode === "couple";
 
+  function applyTogetherFromStatus(goals: TogetherGoal[]) {
+    setTogetherGoals(goals);
+    setApprovedTogether(new Set(goals.map((goal) => goal.uuid)));
+    const accepted = goals.filter((goal) => goal.accepted);
+    if (accepted.length) applyApprovedLocks(accepted, goals);
+    const pending = goals.filter((goal) => !goal.accepted);
+    if (pending.length) {
+      setStep((current) =>
+        current === "mode" || current === "invite" || current === "finance"
+          ? "together"
+          : current
+      );
+    }
+  }
+
+  function applyApprovedLocks(approved: TogetherGoal[], catalog: TogetherGoal[]) {
+    const slugs = approved
+      .map((goal) => goal.template_slug)
+      .filter((slug): slug is string => !!slug);
+    setLocked(new Set(slugs));
+    setSelected((prev) => {
+      const next = { ...prev };
+      for (const goal of catalog) {
+        if (goal.template_slug) delete next[goal.template_slug];
+      }
+      for (const goal of approved) {
+        if (goal.template_slug) next[goal.template_slug] = "shared";
+      }
+      return next;
+    });
+    setTargets((prev) => {
+      const next = { ...prev };
+      for (const goal of approved) {
+        if (goal.template_slug) {
+          next[goal.template_slug] = formatTemplateTarget(goal.target_value);
+        }
+      }
+      return next;
+    });
+    setPeriods((prev) => {
+      const next = { ...prev };
+      for (const goal of approved) {
+        if (!goal.template_slug) continue;
+        if (goal.period === "daily" || goal.period === "weekly" || goal.period === "monthly") {
+          next[goal.template_slug] = goal.period;
+        }
+      }
+      return next;
+    });
+  }
+
   function toggle(template: GoalTemplate) {
     setSelected((prev) => {
       const next = { ...prev };
@@ -231,16 +307,47 @@ export default function OnboardingScreen() {
     });
   }
 
-  async function goInvite() {
+  async function shareOwnCode() {
     setError(null);
-    setMode("couple");
     setLoading(true);
     try {
       const { partnership } = await ensurePartnership();
       setInviteCode(partnership.invite_code);
-      setStep("invite");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not create a couple space");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function joinWithPartnerCode() {
+    const code = normalizeInviteCode(partnerCode);
+    if (!code) return;
+    if (inviteCode && code === normalizeInviteCode(inviteCode)) {
+      setError("That's your code — ask your partner for theirs.");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const { partnership } = await joinPartnership(code);
+      const other = otherMember(partnership, user?.username);
+      if (!other) {
+        setError("That's your code — ask your partner for theirs.");
+        return;
+      }
+      setInviteCode(partnership.invite_code);
+      setLinkedName(other.username);
+      setPartnerCode("");
+      await refreshUser();
+      try {
+        const status = await fetchOnboardingStatus();
+        applyTogetherFromStatus(status.together_goals ?? []);
+      } catch {
+        // inherited templates are optional until setup
+      }
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not link with that code");
     } finally {
       setLoading(false);
     }
@@ -279,7 +386,15 @@ export default function OnboardingScreen() {
   function back() {
     setError(null);
     if (step === "invite") setStep("mode");
-    if (step === "finance") setStep(couple && !alreadyPaired ? "invite" : "mode");
+    if (step === "together" && !startedPaired) setStep("invite");
+    if (step === "finance")
+      setStep(
+        togetherGoals.some((goal) => !goal.accepted)
+          ? "together"
+          : couple && !startedPaired
+            ? "invite"
+            : "mode"
+      );
     if (step === "fitness") setStep("finance");
     if (step === "habit") setStep("fitness");
     if (step === "remind") setStep("habit");
@@ -287,14 +402,25 @@ export default function OnboardingScreen() {
 
   function nextFrom(current: Step) {
     if (current === "mode") {
-      if (mode === "couple" && !alreadyPaired) {
-        void goInvite();
+      if (mode === "couple" && !startedPaired) {
+        setStep("invite");
         return;
       }
       setStep("finance");
       return;
     }
-    if (current === "invite") setStep("finance");
+    if (current === "invite") {
+      setStep(togetherGoals.some((goal) => !goal.accepted) ? "together" : "finance");
+      return;
+    }
+    if (current === "together") {
+      applyApprovedLocks(
+        togetherGoals.filter((goal) => approvedTogether.has(goal.uuid)),
+        togetherGoals
+      );
+      setStep("finance");
+      return;
+    }
     if (current === "finance") setStep("fitness");
     if (current === "fitness") setStep("habit");
     if (current === "habit") setStep("remind");
@@ -318,6 +444,9 @@ export default function OnboardingScreen() {
         })),
         invite_email:
           couple && inviteEmail.trim() && !emailSent ? inviteEmail.trim() : "",
+        ...(togetherGoals.length
+          ? { approve_together: [...approvedTogether] }
+          : {}),
       });
       await refreshUser();
       await Promise.all([loadCategories(), loadGroups()]);
@@ -353,10 +482,15 @@ export default function OnboardingScreen() {
     nextFrom(group);
   }
 
-  const steps: Step[] = alreadyPaired
-    ? ["finance", "fitness", "habit", "remind"]
+  const reviewTogether = togetherGoals.some((goal) => !goal.accepted);
+  const steps: Step[] = startedPaired
+    ? reviewTogether
+      ? ["together", "finance", "fitness", "habit", "remind"]
+      : ["finance", "fitness", "habit", "remind"]
     : couple
-      ? ["mode", "invite", "finance", "fitness", "habit", "remind"]
+      ? reviewTogether
+        ? ["mode", "invite", "together", "finance", "fitness", "habit", "remind"]
+        : ["mode", "invite", "finance", "fitness", "habit", "remind"]
       : ["mode", "finance", "fitness", "habit", "remind"];
   const progress = Math.max(1, steps.indexOf(step) + 1);
   const total = steps.length;
@@ -386,8 +520,8 @@ export default function OnboardingScreen() {
             <>
               <Text style={styles.title}>Who’s this for?</Text>
               <Text style={styles.body}>
-                You can always invite someone later. Personal goals stay private
-                either way.
+                You can enter their invite code or share yours next. Personal
+                goals stay private either way.
               </Text>
               <Pressable
                 onPress={() => setMode("solo")}
@@ -418,35 +552,113 @@ export default function OnboardingScreen() {
           ) : null}
 
           {step === "invite" ? (
+            linkedName ? (
+              <>
+                <Text style={styles.title}>You’re linked</Text>
+                <Text style={styles.body}>
+                  You and {linkedName} share couple goals after you both
+                  approve them. Personal ones stay just yours.
+                </Text>
+                <View style={styles.linkedCard}>
+                  <Text style={styles.cardEmoji}>💛</Text>
+                  <View style={styles.cardText}>
+                    <Text style={styles.cardTitle}>{linkedName}</Text>
+                    <Text style={styles.cardBody}>
+                      Shared caps and habits count both of you.
+                    </Text>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.title}>Link with your person</Text>
+                <Text style={styles.body}>
+                  If they already have NightCap, enter their code. Otherwise
+                  share yours — they’ll join after they create an account.
+                </Text>
+                <Text style={styles.labelFirst}>Their invite code</Text>
+                <TextInput
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  autoComplete="off"
+                  value={partnerCode}
+                  onChangeText={(value) => setPartnerCode(formatInviteCodeInput(value))}
+                  onSubmitEditing={() => void joinWithPartnerCode()}
+                  returnKeyType="done"
+                  placeholder="ABC123"
+                  placeholderTextColor={colors.muted}
+                  maxLength={8}
+                  style={styles.input}
+                />
+                <PrimaryButton
+                  title="Link with partner"
+                  onPress={() => void joinWithPartnerCode()}
+                  loading={loading}
+                  disabled={normalizeInviteCode(partnerCode).length < 6}
+                />
+                <View style={styles.orRow}>
+                  <View style={styles.orLine} />
+                  <Text style={styles.orText}>or invite them</Text>
+                  <View style={styles.orLine} />
+                </View>
+                {inviteCode ? (
+                  <>
+                    <Text style={styles.code}>{inviteCode}</Text>
+                    <PrimaryButton
+                      title="Share invite code"
+                      variant="secondary"
+                      onPress={() => void shareCode()}
+                    />
+                    <Text style={styles.label}>Or email them</Text>
+                    <TextInput
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      value={inviteEmail}
+                      onChangeText={setInviteEmail}
+                      placeholder="partner@email.com"
+                      placeholderTextColor={colors.muted}
+                      style={styles.input}
+                    />
+                    <PrimaryButton
+                      title={emailSent ? "Invite sent" : "Send email invite"}
+                      variant="secondary"
+                      onPress={() => void sendInvite()}
+                      loading={loading}
+                      disabled={!inviteEmail.trim() || emailSent}
+                    />
+                  </>
+                ) : (
+                  <PrimaryButton
+                    title="Share my own code instead"
+                    variant="secondary"
+                    onPress={() => void shareOwnCode()}
+                    loading={loading}
+                  />
+                )}
+              </>
+            )
+          ) : null}
+
+          {step === "together" ? (
             <>
-              <Text style={styles.title}>Invite your person</Text>
+              <Text style={styles.title}>Together goals</Text>
               <Text style={styles.body}>
-                They’ll see shared goals. Your personal ones stay just yours.
-                They can join with this code after they create an account.
+                {linkedName
+                  ? `${linkedName} already set these up as together. Approve the ones you want to share — they count both of you.`
+                  : "Approve the together goals already set up for this couple."}
               </Text>
-              <Text style={styles.code}>{inviteCode || "••••••"}</Text>
-              <PrimaryButton
-                title="Share invite code"
-                variant="secondary"
-                onPress={() => void shareCode()}
-                disabled={!inviteCode}
-              />
-              <Text style={styles.label}>Or email them</Text>
-              <TextInput
-                autoCapitalize="none"
-                keyboardType="email-address"
-                value={inviteEmail}
-                onChangeText={setInviteEmail}
-                placeholder="partner@email.com"
-                placeholderTextColor={colors.muted}
-                style={styles.input}
-              />
-              <PrimaryButton
-                title={emailSent ? "Invite sent" : "Send email invite"}
-                variant="secondary"
-                onPress={() => void sendInvite()}
-                loading={loading}
-                disabled={!inviteEmail.trim() || emailSent}
+              <TogetherGoalsReview
+                goals={togetherGoals}
+                approved={approvedTogether}
+                partnerName={linkedName}
+                onToggle={(uuid) => {
+                  setApprovedTogether((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(uuid)) next.delete(uuid);
+                    else next.add(uuid);
+                    return next;
+                  });
+                }}
               />
             </>
           ) : null}
@@ -553,14 +765,40 @@ export default function OnboardingScreen() {
                 title={
                   step === "remind"
                     ? `Remind me at ${formatReminderTime(reminderHour, reminderMinute)}`
-                    : "Continue"
+                    : step === "together"
+                      ? approvedTogether.size
+                        ? `Approve ${approvedTogether.size} together`
+                        : "Continue"
+                      : "Continue"
                 }
                 onPress={() => nextFrom(step)}
-                loading={loading}
+                loading={loading && step !== "invite"}
+                disabled={step === "invite" && loading}
               />
-              {step === "invite" ? (
-                <Pressable onPress={() => setStep("finance")} hitSlop={8}>
+              {step === "invite" && !linkedName ? (
+                <Pressable
+                  onPress={() =>
+                    setStep(
+                      togetherGoals.some((goal) => !goal.accepted)
+                        ? "together"
+                        : "finance"
+                    )
+                  }
+                  hitSlop={8}
+                >
                   <Text style={styles.skip}>Skip for now</Text>
+                </Pressable>
+              ) : null}
+              {step === "together" ? (
+                <Pressable
+                  onPress={() => {
+                    setApprovedTogether(new Set());
+                    setLocked(new Set());
+                    setStep("finance");
+                  }}
+                  hitSlop={8}
+                >
+                  <Text style={styles.skip}>Skip these</Text>
                 </Pressable>
               ) : null}
               {step === "finance" || step === "fitness" || step === "habit" ? (
@@ -668,8 +906,41 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 16,
   },
+  linkedCard: {
+    flexDirection: "row",
+    gap: 14,
+    alignItems: "center",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: "rgba(139, 92, 246, 0.18)",
+    padding: 16,
+    marginBottom: 12,
+  },
+  orRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 22,
+    marginBottom: 8,
+  },
+  orLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  orText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.muted,
+  },
   label: {
     marginTop: 22,
+    marginBottom: 8,
+    fontSize: 14,
+    color: colors.muted,
+  },
+  labelFirst: {
     marginBottom: 8,
     fontSize: 14,
     color: colors.muted,

@@ -281,6 +281,7 @@ REST API for the NightCap iOS habit and budget tracker.
         {"name": "Charts", "description": "Daily and weekly graph series"},
         {"name": "Goals", "description": "Weekly/monthly targets and progress"},
         {"name": "Onboarding", "description": "Starter goal templates and setup flow"},
+        {"name": "Billing", "description": "Couple membership, trials, and store receipt verification"},
         {"name": "Dashboard", "description": "Streaks, weekly summaries, and totals"},
         {"name": "Export", "description": "Data export"},
         {"name": "Health", "description": "Service health"},
@@ -288,3 +289,23 @@ REST API for the NightCap iOS habit and budget tracker.
 }
 
 SUPPORTED_LANGUAGES = ["en", "es"]
+
+IAP_TRIAL_DAYS = int(os.environ.get("IAP_TRIAL_DAYS", 30))
+IAP_APPLE_BUNDLE_ID = os.environ.get("IAP_APPLE_BUNDLE_ID", "com.nightcap.app")
+IAP_GOOGLE_PACKAGE_NAME = os.environ.get("IAP_GOOGLE_PACKAGE_NAME", "com.nightcap.app")
+IAP_APPLE_VERIFY_SIGNATURE = os.environ.get("IAP_APPLE_VERIFY_SIGNATURE", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)
+IAP_GOOGLE_ALLOW_UNVERIFIED = os.environ.get("IAP_GOOGLE_ALLOW_UNVERIFIED", "false").lower() in (
+    "true",
+    "1",
+    "yes",
+)
+IAP_STAFF_COMPLIMENTARY = os.environ.get("IAP_STAFF_COMPLIMENTARY", "false").lower() in (
+    "true",
+    "1",
+    "yes",
+)
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "")

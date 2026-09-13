@@ -19,11 +19,23 @@ export async function invitePartner(email: string): Promise<{
   });
 }
 
+export function normalizeInviteCode(code: string): string {
+  return code.trim().toUpperCase().replace(/[\s-]/g, "");
+}
+
+export function formatInviteCodeInput(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 export async function joinPartnership(invite_code: string): Promise<{
   partnership: Partnership;
 }> {
   return apiRequest("/api/v1/partnership/join/", {
     method: "POST",
-    body: { invite_code },
+    body: { invite_code: normalizeInviteCode(invite_code) },
   });
+}
+
+export async function leavePartnership(): Promise<{ partnership: null }> {
+  return apiRequest("/api/v1/partnership/leave/", { method: "POST" });
 }

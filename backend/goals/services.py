@@ -222,11 +222,20 @@ def combine_shared_day_values(day_entries: list[Entry], metric_kind: str) -> Dec
 
 def partner_categories_for_goal(goal: Goal) -> list[tuple]:
     """Categories that roll into this goal (both partners when shared)."""
-    if goal.scope != Goal.SCOPE_SHARED or not goal.partnership_id:
+    if goal.scope != Goal.SCOPE_SHARED or not goal.partnership_id or not goal.accepted:
         return [(goal.user, goal.category)]
-    user_ids = list(goal.partnership.members.values_list("user_id", flat=True))
+    accepted_user_ids = list(
+        Goal.objects.filter(
+            partnership_id=goal.partnership_id,
+            scope=Goal.SCOPE_SHARED,
+            is_active=True,
+            accepted=True,
+            category__name=goal.category.name,
+            category__type=goal.category.type,
+        ).values_list("user_id", flat=True)
+    )
     categories = TrackingCategory.objects.filter(
-        user_id__in=user_ids,
+        user_id__in=accepted_user_ids,
         name=goal.category.name,
         type=goal.category.type,
     ).select_related("user")
@@ -286,8 +295,10 @@ def compute_goal_progress(goal: Goal, reference_date: date | None = None) -> Goa
 
 
 def compute_all_goal_progress(user, reference_date: date | None = None) -> list[GoalProgress]:
-    goals = Goal.objects.filter(user=user, is_active=True).select_related(
-        "category", "partnership"
+    goals = (
+        Goal.objects.filter(user=user, is_active=True)
+        .exclude(scope=Goal.SCOPE_SHARED, accepted=False)
+        .select_related("category", "partnership")
     )
     return [compute_goal_progress(goal, reference_date) for goal in goals]
 
@@ -478,6 +489,7 @@ def compute_group_goal_summary(
 
     goals = (
         Goal.objects.filter(user=user, is_active=True)
+        .exclude(scope=Goal.SCOPE_SHARED, accepted=False)
         .select_related("category", "category__group", "partnership")
         .order_by(
             "category__group__sort_order",

@@ -8,8 +8,12 @@
     "scheme": "nightcap",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.nightcap.app"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.nightcap.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -58,9 +62,11 @@
         "expo-notifications",
         {
           "color": "#8B5CF6",
-          "defaultChannel": "nightcap-reminders"
+          "defaultChannel": "nightcap-reminders",
+          "enableBackgroundRemoteNotifications": false
         }
-      ]
+      ],
+      "expo-iap"
     ],
     "experiments": {
       "typedRoutes": true

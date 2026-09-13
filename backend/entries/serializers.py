@@ -422,6 +422,21 @@ class ChartQuantityUnitSerializer(serializers.Serializer):
     total = serializers.DecimalField(max_digits=12, decimal_places=2)
 
 
+class ChartPointCategorySerializer(serializers.Serializer):
+    uuid = serializers.CharField()
+    name = serializers.CharField()
+    emoji = serializers.CharField(allow_blank=True)
+    icon = serializers.CharField(allow_blank=True)
+    type = serializers.CharField()
+    metric_kind = serializers.CharField()
+    unit = serializers.CharField(allow_blank=True)
+    entry_count = serializers.IntegerField()
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    quantity = serializers.DecimalField(max_digits=12, decimal_places=2)
+    together_count = serializers.IntegerField(required=False, default=0)
+    alone_count = serializers.IntegerField(required=False, default=0)
+
+
 class ChartPointSerializer(serializers.Serializer):
     date = serializers.DateField(allow_null=True, required=False)
     week_start = serializers.DateField(allow_null=True, required=False)
@@ -431,6 +446,7 @@ class ChartPointSerializer(serializers.Serializer):
     together_count = serializers.IntegerField(required=False, default=0)
     alone_count = serializers.IntegerField(required=False, default=0)
     quantity_by_unit = ChartQuantityUnitSerializer(many=True, required=False)
+    by_category = ChartPointCategorySerializer(many=True, required=False)
 
 
 class ChartTogetherSerializer(serializers.Serializer):
@@ -458,6 +474,13 @@ class ChartCategorySerializer(serializers.Serializer):
     quantity_total = serializers.DecimalField(max_digits=12, decimal_places=2)
     together_count = serializers.IntegerField(required=False, default=0)
     alone_count = serializers.IntegerField(required=False, default=0)
+    yours_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, default=0
+    )
+    yours_quantity = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, default=0
+    )
+    yours_entry_count = serializers.IntegerField(required=False, default=0)
 
 
 class ChartGroupSerializer(serializers.Serializer):
@@ -481,6 +504,10 @@ class ChartQuerySerializer(serializers.Serializer):
     start_date = serializers.DateField(required=False)
     end_date = serializers.DateField(required=False)
     group = serializers.CharField(required=False, allow_blank=True)
+    with_filter = serializers.ChoiceField(
+        choices=["together", "alone"],
+        required=False,
+    )
 
 
 class ChartResponseSerializer(serializers.Serializer):
@@ -491,3 +518,123 @@ class ChartResponseSerializer(serializers.Serializer):
     by_category = ChartCategorySerializer(many=True)
     by_group = ChartGroupSerializer(many=True, required=False)
     together = ChartTogetherSerializer(required=False)
+
+
+class RecapMonthQuerySerializer(serializers.Serializer):
+    year = serializers.IntegerField(min_value=2000, max_value=2100, required=False)
+    month = serializers.IntegerField(min_value=1, max_value=12, required=False)
+
+
+class RecapYearQuerySerializer(serializers.Serializer):
+    year = serializers.IntegerField(min_value=2000, max_value=2100, required=False)
+
+
+class RecapPhotoSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    favorite_moment = serializers.CharField(allow_blank=True)
+    mood = serializers.CharField(allow_blank=True)
+    photo_url = serializers.CharField(allow_null=True)
+
+
+class RecapMomentSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    text = serializers.CharField(allow_blank=True)
+    mood = serializers.CharField(allow_blank=True)
+    has_photo = serializers.BooleanField()
+    photo_url = serializers.CharField(allow_null=True, required=False)
+
+
+class RecapMoodSerializer(serializers.Serializer):
+    mood = serializers.CharField()
+    count = serializers.IntegerField()
+
+
+class RecapCategorySerializer(serializers.Serializer):
+    name = serializers.CharField()
+    emoji = serializers.CharField(allow_blank=True)
+    icon = serializers.CharField(allow_blank=True)
+    type = serializers.CharField()
+    metric_kind = serializers.CharField()
+    unit = serializers.CharField(allow_blank=True)
+    entry_count = serializers.IntegerField()
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    quantity = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+
+class RecapSlideSerializer(serializers.Serializer):
+    type = serializers.CharField()
+    eyebrow = serializers.CharField(required=False, allow_blank=True)
+    title = serializers.CharField(required=False, allow_blank=True)
+    body = serializers.CharField(required=False, allow_blank=True)
+    stat = serializers.CharField(required=False, allow_blank=True)
+    label = serializers.CharField(required=False, allow_blank=True)
+    season_key = serializers.CharField(required=False, allow_blank=True)
+    photos = RecapPhotoSerializer(many=True, required=False)
+    moments = RecapMomentSerializer(many=True, required=False)
+    moods = RecapMoodSerializer(many=True, required=False)
+    categories = RecapCategorySerializer(many=True, required=False)
+    expense_total = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False
+    )
+
+
+class RecapSnapshotSerializer(serializers.Serializer):
+    start_date = serializers.DateField()
+    end_date = serializers.DateField()
+    day_count = serializers.IntegerField()
+    nights_logged = serializers.IntegerField()
+    nights_completed = serializers.IntegerField()
+    photo_count = serializers.IntegerField()
+    photos = RecapPhotoSerializer(many=True)
+    moments = RecapMomentSerializer(many=True)
+    moods = RecapMoodSerializer(many=True)
+    categories = RecapCategorySerializer(many=True)
+    expense_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    income_total = serializers.DecimalField(max_digits=12, decimal_places=2)
+    habit_days = serializers.IntegerField()
+    together_days = serializers.IntegerField()
+
+
+class RecapSeasonSerializer(RecapSnapshotSerializer):
+    key = serializers.CharField()
+    name = serializers.CharField()
+    tagline = serializers.CharField()
+
+
+class RecapMonthResponseSerializer(serializers.Serializer):
+    kind = serializers.CharField()
+    year = serializers.IntegerField()
+    month = serializers.IntegerField()
+    title = serializers.CharField()
+    snapshot = RecapSnapshotSerializer()
+    slides = RecapSlideSerializer(many=True)
+
+
+class RecapYearResponseSerializer(serializers.Serializer):
+    kind = serializers.CharField()
+    year = serializers.IntegerField()
+    title = serializers.CharField()
+    snapshot = RecapSnapshotSerializer()
+    seasons = RecapSeasonSerializer(many=True)
+    slides = RecapSlideSerializer(many=True)
+
+
+class RecapMonthSummarySerializer(serializers.Serializer):
+    year = serializers.IntegerField()
+    month = serializers.IntegerField()
+    nights_logged = serializers.IntegerField()
+    title = serializers.CharField()
+
+
+class RecapYearSummarySerializer(serializers.Serializer):
+    year = serializers.IntegerField()
+    nights_logged = serializers.IntegerField()
+    title = serializers.CharField()
+
+
+class RecapIndexResponseSerializer(serializers.Serializer):
+    highlight_days = serializers.IntegerField()
+    featured_month = RecapMonthSummarySerializer(allow_null=True)
+    featured_year = RecapYearSummarySerializer(allow_null=True)
+    months = RecapMonthSummarySerializer(many=True)
+    years = RecapYearSummarySerializer(many=True)

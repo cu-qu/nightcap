@@ -13,9 +13,10 @@ class GoalAdmin(admin.ModelAdmin):
         "direction",
         "target_value",
         "scope",
+        "accepted",
         "is_active",
     )
-    list_filter = ("period", "direction", "scope", "is_active")
+    list_filter = ("period", "direction", "scope", "accepted", "is_active")
     search_fields = ("name", "user__username", "category__name")
 
 

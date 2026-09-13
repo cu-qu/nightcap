@@ -29,14 +29,23 @@ import {
   groupFilterId,
 } from "@/src/utils/calendarStats";
 import {
+  ALONE_COLOR,
+  ALONE_FILTER,
+  TOGETHER_COLOR,
+  TOGETHER_FILTER,
   axisLabel,
+  categoryColorId,
   categoryDisplay,
+  categoryYoursDisplay,
   chartCategoryName,
+  colorForCategory,
   formatBarValue,
   pointValue,
+  segmentValue,
   seriesForFilter,
+  uniqueCategoryColors,
 } from "@/src/utils/chartMetrics";
-import { monthLabel, parseIsoDate } from "@/src/utils/date";
+import { monthLabel, todayIso, toIsoDate } from "@/src/utils/date";
 
 export default function ChartsScreen() {
   const router = useRouter();
@@ -44,6 +53,9 @@ export default function ChartsScreen() {
   const groups = useGroupsStore((s) => s.groups);
   const loadGroups = useGroupsStore((s) => s.load);
 
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
   const [period, setPeriod] = useState<"daily" | "weekly">("daily");
   const [filterId, setFilterId] = useState(ALL_FILTER);
   const [data, setData] = useState<ChartResponse | null>(null);
@@ -53,25 +65,74 @@ export default function ChartsScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const goalPeriod: GoalPeriod = period === "weekly" ? "weekly" : "monthly";
+  const isCurrentMonth =
+    year === now.getFullYear() && month === now.getMonth() + 1;
+
+  function shiftMonth(delta: number) {
+    const d = new Date(year, month - 1 + delta, 1);
+    const nextY = d.getFullYear();
+    const nextM = d.getMonth() + 1;
+    if (
+      nextY > now.getFullYear() ||
+      (nextY === now.getFullYear() && nextM > now.getMonth() + 1)
+    ) {
+      return;
+    }
+    setYear(nextY);
+    setMonth(nextM);
+  }
 
   const load = useCallback(
-    async (p: "daily" | "weekly", groupId: string) => {
+    async (p: "daily" | "weekly", groupId: string, y: number, m: number) => {
         setError(null);
+        setData(null);
         try {
-          const group = groupId === ALL_FILTER ? undefined : groupId;
-          const charts = await fetchCharts(p, { group });
+          const group =
+            groupId === ALL_FILTER ||
+            groupId === TOGETHER_FILTER ||
+            groupId === ALONE_FILTER
+              ? undefined
+              : groupId;
+          const start = `${y}-${String(m).padStart(2, "0")}-01`;
+          const last = new Date(y, m, 0);
+          const endIso = toIsoDate(last);
+          const today = todayIso();
+          const end = today < endIso && today >= start ? today : endIso;
+          const withFilter =
+            groupId === TOGETHER_FILTER
+              ? "together"
+              : groupId === ALONE_FILTER
+                ? "alone"
+                : undefined;
+          const charts = await fetchCharts(p, {
+            group,
+            startDate: start,
+            endDate: end,
+            withFilter,
+          });
           setData(charts);
+          const current =
+            y === new Date().getFullYear() && m === new Date().getMonth() + 1;
+          if (!current) {
+            setGoals([]);
+            return;
+          }
           try {
             const summary = await getGroupSummary(
               p === "weekly" ? "weekly" : "monthly"
             );
             const buckets = summary.groups ?? [];
+            const allGoals = buckets.flatMap((g) => g.goals);
             const matching =
               groupId === ALL_FILTER
-                ? buckets.flatMap((g) => g.goals)
-                : buckets
-                    .filter((g) => g.key === groupId || g.uuid === groupId)
-                    .flatMap((g) => g.goals);
+                ? allGoals
+                : groupId === TOGETHER_FILTER
+                  ? allGoals.filter((g) => g.scope === "shared")
+                  : groupId === ALONE_FILTER
+                    ? allGoals.filter((g) => g.scope !== "shared")
+                    : buckets
+                        .filter((g) => g.key === groupId || g.uuid === groupId)
+                        .flatMap((g) => g.goals);
             setGoals(matching);
           } catch {
             setGoals([]);
@@ -93,7 +154,7 @@ export default function ChartsScreen() {
       setLoading(true);
       void (async () => {
         try {
-          await load(period, filterId);
+          await load(period, filterId, year, month);
         } finally {
           if (active) setLoading(false);
         }
@@ -101,13 +162,13 @@ export default function ChartsScreen() {
       return () => {
         active = false;
       };
-    }, [period, filterId, load])
+    }, [period, filterId, year, month, load])
   );
 
   async function onRefresh() {
     setRefreshing(true);
     try {
-      await load(period, filterId);
+      await load(period, filterId, year, month);
     } finally {
       setRefreshing(false);
     }
@@ -124,39 +185,78 @@ export default function ChartsScreen() {
         }))
         .filter((c) => c.id),
     ];
+    if (hasPartner || (data?.together?.together_count || 0) + (data?.together?.alone_count || 0) > 0) {
+      chips.push({ id: TOGETHER_FILTER, label: "Together" });
+      chips.push({ id: ALONE_FILTER, label: "Solo" });
+    }
     return chips;
-  }, [groups]);
+  }, [groups, hasPartner, data?.together]);
 
   const series = useMemo(
     () => seriesForFilter(filterId, data?.points ?? []),
     [filterId, data]
   );
 
+  const colorMap = useMemo(() => {
+    const ids: string[] = [];
+    for (const cat of data?.by_category ?? []) {
+      ids.push(categoryColorId(cat));
+    }
+    for (const point of data?.points ?? []) {
+      for (const seg of point.by_category ?? []) {
+        ids.push(categoryColorId(seg));
+      }
+    }
+    return uniqueCategoryColors(ids);
+  }, [data]);
+
   const barPoints = useMemo(() => {
     const points = data?.points ?? [];
     return points.map((p, i) => {
       const iso = period === "weekly" ? p.week_start : p.date;
       const value = pointValue(p, series);
+      const segments = (p.by_category ?? [])
+        .map((seg) => {
+          const id = categoryColorId(seg);
+          return {
+            key: id,
+            value: segmentValue(seg, series),
+            color: colorForCategory(id, colorMap),
+          };
+        })
+        .filter((seg) => seg.value > 0)
+        .sort((a, b) => a.value - b.value);
       return {
         key: iso || `${period}-${i}`,
         label: axisLabel(iso, period),
         value,
         display: formatBarValue(value, series),
+        segments,
       };
     });
-  }, [data, period, series]);
+  }, [data, period, series, colorMap]);
 
-  const rangeLabel = useMemo(() => {
-    if (!data) return "";
-    if (period === "daily") {
-      const start = parseIsoDate(data.start_date);
-      return monthLabel(start.getFullYear(), start.getMonth() + 1);
-    }
-    const start = parseIsoDate(data.start_date);
-    const end = parseIsoDate(data.end_date);
-    const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-    return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`;
+  const togetherBarPoints = useMemo(() => {
+    const points = data?.points ?? [];
+    return points.map((p, i) => {
+      const iso = period === "weekly" ? p.week_start : p.date;
+      const togetherN = p.together_count || 0;
+      const aloneN = p.alone_count || 0;
+      const value = togetherN + aloneN;
+      return {
+        key: `with-${iso || `${period}-${i}`}`,
+        label: axisLabel(iso, period),
+        value,
+        display: value ? String(value) : "",
+        segments: [
+          { key: ALONE_FILTER, value: aloneN, color: ALONE_COLOR },
+          { key: TOGETHER_FILTER, value: togetherN, color: TOGETHER_COLOR },
+        ].filter((s) => s.value > 0),
+      };
+    });
   }, [data, period]);
+
+  const rangeLabel = monthLabel(year, month);
 
   const totalsLine = useMemo(() => {
     if (!data) return "";
@@ -186,9 +286,11 @@ export default function ChartsScreen() {
   }, [data, filterId, series.kind]);
 
   const together = data?.together;
-  const showTogether =
-    (together?.together_count || 0) + (together?.alone_count || 0) > 0 &&
-    (hasPartner || (together?.together_count || 0) > 0);
+  const showTogetherChart =
+    filterId !== TOGETHER_FILTER &&
+    filterId !== ALONE_FILTER &&
+    ((together?.together_count || 0) + (together?.alone_count || 0) > 0 ||
+      (hasPartner && togetherBarPoints.some((p) => p.value > 0)));
 
   const categories = useMemo(() => {
     const rows = [...(data?.by_category ?? [])]
@@ -203,6 +305,33 @@ export default function ChartsScreen() {
   }, [data]);
 
   const byGroup = data?.by_group ?? [];
+
+  const legendItems = useMemo(() => {
+    return categories
+      .map(({ cat }) => {
+        const id = categoryColorId(cat);
+        const value = segmentValue(
+          {
+            amount: cat.amount_total,
+            quantity: cat.quantity_total,
+            entry_count: cat.entry_count,
+            together_count: cat.together_count,
+            alone_count: cat.alone_count,
+            type: cat.type,
+            metric_kind: cat.metric_kind,
+            unit: cat.unit,
+          },
+          series
+        );
+        return {
+          cat,
+          id,
+          value,
+          color: colorForCategory(id, colorMap),
+        };
+      })
+      .filter((item) => item.value > 0);
+  }, [categories, series, colorMap]);
 
   return (
     <Screen>
@@ -260,21 +389,41 @@ export default function ChartsScreen() {
 
         {rangeLabel || totalsLine ? (
           <View style={styles.banner}>
-            <View style={styles.bannerText}>
+            <View style={styles.monthNav}>
+              <Pressable onPress={() => shiftMonth(-1)} style={styles.navBtn}>
+                <Text style={styles.navText}>‹</Text>
+              </Pressable>
               <Text style={styles.bannerLabel}>{rangeLabel}</Text>
-              {totalsLine ? (
+              <Pressable
+                onPress={() => shiftMonth(1)}
+                disabled={isCurrentMonth}
+                style={[styles.navBtn, isCurrentMonth && styles.navBtnOff]}
+              >
                 <Text
-                  style={[
-                    styles.bannerValue,
-                    totalsLine.startsWith("-") && styles.bannerSpend,
-                  ]}
+                  style={[styles.navText, isCurrentMonth && styles.navTextOff]}
                 >
-                  {totalsLine}
+                  ›
                 </Text>
-              ) : (
-                <Text style={styles.bannerQuiet}>No activity in this range</Text>
-              )}
+              </Pressable>
             </View>
+            {totalsLine ? (
+              <Text
+                style={[
+                  styles.bannerValue,
+                  totalsLine.startsWith("-") && styles.bannerSpend,
+                ]}
+              >
+                {totalsLine}
+              </Text>
+            ) : (
+              <Text style={styles.bannerQuiet}>
+                {filterId === TOGETHER_FILTER
+                  ? "No together activity in this range"
+                  : filterId === ALONE_FILTER
+                    ? "No solo activity in this range"
+                    : "No activity in this range"}
+              </Text>
+            )}
             <Text style={styles.seriesTitle}>{series.title}</Text>
           </View>
         ) : null}
@@ -288,8 +437,70 @@ export default function ChartsScreen() {
             <ChartBars
               points={barPoints}
               color={series.color}
-              emptyLabel={`No ${series.title.toLowerCase()} yet`}
+              emptyLabel={
+                filterId === TOGETHER_FILTER
+                  ? "No together activity yet"
+                  : filterId === ALONE_FILTER
+                    ? "No solo activity yet"
+                    : `No ${series.title.toLowerCase()} yet`
+              }
             />
+            {legendItems.length > 0 ? (
+              <View style={styles.legend}>
+                {legendItems.map((item) => (
+                  <View key={item.id} style={styles.legendItem}>
+                    <View
+                      style={[styles.legendDot, { backgroundColor: item.color }]}
+                    />
+                    <Text style={styles.legendText} numberOfLines={1}>
+                      {categoryGlyph({
+                        emoji: item.cat.emoji,
+                        icon: item.cat.icon,
+                        name: chartCategoryName(item.cat),
+                      })}{" "}
+                      {chartCategoryName(item.cat)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {showTogetherChart ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Together vs solo</Text>
+                <Text style={styles.togetherCopy}>
+                  {hasPartner
+                    ? "Workouts and habits with your partner vs on your own."
+                    : "Workouts and habits marked with a partner vs solo."}
+                </Text>
+                {together &&
+                together.together_count + together.alone_count > 0 ? (
+                  <Text style={styles.togetherTotals}>
+                    Together {together.together_count} · Solo{" "}
+                    {together.alone_count}
+                  </Text>
+                ) : null}
+                <ChartBars
+                  points={togetherBarPoints}
+                  color={TOGETHER_COLOR}
+                  emptyLabel="No together or solo logs yet"
+                />
+                <View style={styles.legend}>
+                  <View style={styles.legendItem}>
+                    <View
+                      style={[styles.legendDot, { backgroundColor: TOGETHER_COLOR }]}
+                    />
+                    <Text style={styles.legendText}>Together</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View
+                      style={[styles.legendDot, { backgroundColor: ALONE_COLOR }]}
+                    />
+                    <Text style={styles.legendText}>Solo</Text>
+                  </View>
+                </View>
+              </View>
+            ) : null}
 
             {filterId === ALL_FILTER && byGroup.length > 0 ? (
               <View style={styles.section}>
@@ -307,21 +518,18 @@ export default function ChartsScreen() {
               </View>
             ) : null}
 
-            {showTogether && together ? (
-              <TogetherCard
-                togetherCount={together.together_count}
-                aloneCount={together.alone_count}
-                hasPartner={hasPartner}
-              />
-            ) : null}
-
             {categories.length > 0 ? (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>By category</Text>
-                <CategoryBreakdown rows={categories} />
+                <CategoryBreakdown
+                  rows={categories}
+                  colors={colorMap}
+                  showYours={hasPartner}
+                />
               </View>
             ) : null}
 
+            {isCurrentMonth ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>
@@ -355,6 +563,7 @@ export default function ChartsScreen() {
                 </Text>
               )}
             </View>
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -407,72 +616,14 @@ function GroupRow({
   );
 }
 
-function TogetherCard({
-  togetherCount,
-  aloneCount,
-  hasPartner,
-}: {
-  togetherCount: number;
-  aloneCount: number;
-  hasPartner: boolean;
-}) {
-  const total = Math.max(togetherCount + aloneCount, 1);
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Together</Text>
-      <Text style={styles.togetherCopy}>
-        {hasPartner
-          ? "Workouts and habits you logged with your partner vs on your own."
-          : "Workouts and habits marked with a partner vs solo."}
-      </Text>
-      <SplitBar
-        label="Together"
-        count={togetherCount}
-        total={total}
-        color={colors.accentSoft}
-      />
-      <SplitBar
-        label="Solo"
-        count={aloneCount}
-        total={total}
-        color={colors.muted}
-      />
-    </View>
-  );
-}
-
-function SplitBar({
-  label,
-  count,
-  total,
-  color,
-}: {
-  label: string;
-  count: number;
-  total: number;
-  color: string;
-}) {
-  const fill = Math.max(6, (count / total) * 100);
-  return (
-    <View style={styles.splitRow}>
-      <Text style={styles.splitLabel}>{label}</Text>
-      <View style={styles.splitTrack}>
-        <View
-          style={[
-            styles.splitFill,
-            { width: `${count ? fill : 0}%`, backgroundColor: color },
-          ]}
-        />
-      </View>
-      <Text style={[styles.splitCount, { color }]}>{count}</Text>
-    </View>
-  );
-}
-
 function CategoryBreakdown({
   rows,
+  colors: colorMap,
+  showYours,
 }: {
   rows: { cat: ChartCategory; display: ReturnType<typeof categoryDisplay> }[];
+  colors: Map<string, string>;
+  showYours?: boolean;
 }) {
   const max = Math.max(...rows.map((r) => r.display.value), 1);
   return (
@@ -480,9 +631,25 @@ function CategoryBreakdown({
       {rows.map(({ cat, display }) => {
         const name = chartCategoryName(cat);
         const together = cat.together_count || 0;
+        const color = colorForCategory(categoryColorId(cat), colorMap);
+        const yours = categoryYoursDisplay(cat);
+        const yoursLine = showYours
+          ? yours.value
+            ? `By you ${yours.label}`
+            : "None by you"
+          : null;
+        const splitYours = Boolean(
+          showYours && display.value > 0 && yours.value !== display.value
+        );
         return (
           <View key={cat.uuid || cat.category__uuid || name} style={styles.catRow}>
-            <View style={styles.catTop}>
+              <View style={styles.catTop}>
+              <View
+                style={[
+                  styles.legendDot,
+                  { backgroundColor: color },
+                ]}
+              />
               <Text style={styles.catEmoji}>
                 {categoryGlyph({
                   emoji: cat.emoji,
@@ -502,22 +669,60 @@ function CategoryBreakdown({
             <View style={styles.catTrack}>
               <View
                 style={[
-                  styles.catFill,
-                  {
-                    width: `${Math.max(4, (display.value / max) * 100)}%`,
-                    backgroundColor: display.spendish
-                      ? colors.danger
-                      : colors.accent,
-                  },
+                  styles.catFillRow,
+                  { width: `${Math.max(4, (display.value / max) * 100)}%` },
                 ]}
-              />
+              >
+                {splitYours ? (
+                  <>
+                    {yours.value > 0 ? (
+                      <View
+                        style={{
+                          flex: yours.value,
+                          backgroundColor: color,
+                        }}
+                      />
+                    ) : null}
+                    {display.value - yours.value > 0 ? (
+                      <View
+                        style={{
+                          flex: display.value - yours.value,
+                          backgroundColor: color,
+                          opacity: 0.35,
+                        }}
+                      />
+                    ) : null}
+                  </>
+                ) : together + (cat.alone_count || 0) > 0 ? (
+                  <>
+                    {together > 0 ? (
+                      <View
+                        style={{
+                          flex: together,
+                          backgroundColor: TOGETHER_COLOR,
+                        }}
+                      />
+                    ) : null}
+                    {(cat.alone_count || 0) > 0 ? (
+                      <View
+                        style={{
+                          flex: cat.alone_count,
+                          backgroundColor: ALONE_COLOR,
+                        }}
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  <View style={{ flex: 1, backgroundColor: color }} />
+                )}
+              </View>
             </View>
-            {together > 0 ? (
+            {yoursLine ? (
+              <Text style={styles.yoursHint}>{yoursLine}</Text>
+            ) : together + (cat.alone_count || 0) > 0 ? (
               <Text style={styles.togetherHint}>
                 Together {together}
-                {cat.alone_count
-                  ? ` · solo ${cat.alone_count}`
-                  : ""}
+                {cat.alone_count ? ` · solo ${cat.alone_count}` : ""}
               </Text>
             ) : null}
           </View>
@@ -597,15 +802,36 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    gap: 4,
+    gap: 8,
   },
-  bannerText: {
-    gap: 2,
+  monthNav: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  navBtn: {
+    borderRadius: 12,
+    backgroundColor: colors.elevated,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  navBtnOff: {
+    opacity: 0.35,
+  },
+  navText: {
+    color: colors.text,
+    fontSize: 18,
+  },
+  navTextOff: {
+    color: colors.muted,
   },
   bannerLabel: {
-    fontSize: 13,
+    flex: 1,
+    textAlign: "center",
+    fontSize: 16,
     fontWeight: "700",
-    color: colors.muted,
+    color: colors.text,
   },
   bannerValue: {
     fontSize: 16,
@@ -626,6 +852,40 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: "uppercase",
     color: colors.muted,
+  },
+  togetherTotals: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  legend: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    maxWidth: "48%",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.text,
   },
   error: {
     marginTop: 12,
@@ -706,38 +966,16 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: colors.accentSoft,
   },
+  yoursHint: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.muted,
+  },
   togetherCopy: {
     fontSize: 13,
     lineHeight: 18,
     color: colors.muted,
-  },
-  splitRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  splitLabel: {
-    width: 72,
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  splitTrack: {
-    flex: 1,
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: colors.elevated,
-    overflow: "hidden",
-  },
-  splitFill: {
-    height: 10,
-    borderRadius: 999,
-  },
-  splitCount: {
-    width: 28,
-    textAlign: "right",
-    fontSize: 13,
-    fontWeight: "700",
   },
   catList: {
     gap: 12,
@@ -772,8 +1010,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.elevated,
     overflow: "hidden",
   },
-  catFill: {
+  catFillRow: {
     height: 8,
+    flexDirection: "row",
     borderRadius: 999,
+    overflow: "hidden",
   },
 });

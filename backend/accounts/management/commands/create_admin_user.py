@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
 from accounts.models import User
+from accounts.memberships import grant_complimentary_membership
 
 class Command(BaseCommand):
     help = "Create admin user"
@@ -11,5 +12,6 @@ class Command(BaseCommand):
             user.is_superuser = True
             user.is_staff = True
             user.save()
+        grant_complimentary_membership(user, note="Local admin")
 
         self.stdout.write(self.style.SUCCESS(f"Admin user created: {user.username}"))

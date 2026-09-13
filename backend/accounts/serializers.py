@@ -3,6 +3,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from .models import UserProfile
+from .memberships import ensure_user_membership, serialize_membership
 
 User = get_user_model()
 
@@ -59,6 +60,7 @@ class UserSerializer(serializers.ModelSerializer):
     onboarding_completed = serializers.SerializerMethodField()
     tracking_mode = serializers.SerializerMethodField()
     partnership = serializers.SerializerMethodField()
+    membership = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -71,6 +73,7 @@ class UserSerializer(serializers.ModelSerializer):
             "onboarding_completed",
             "tracking_mode",
             "partnership",
+            "membership",
             "date_joined",
         )
         read_only_fields = (
@@ -81,6 +84,7 @@ class UserSerializer(serializers.ModelSerializer):
             "onboarding_completed",
             "tracking_mode",
             "partnership",
+            "membership",
             "date_joined",
         )
 
@@ -103,6 +107,9 @@ class UserSerializer(serializers.ModelSerializer):
         from accounts.partnerships import get_user_partnership, serialize_partnership
 
         return serialize_partnership(get_user_partnership(obj))
+
+    def get_membership(self, obj):
+        return serialize_membership(ensure_user_membership(obj), user=obj)
 
     def update(self, instance, validated_data):
         pref_lang = validated_data.pop("preferred_language", None)
@@ -149,6 +156,13 @@ class PartnershipInviteSerializer(serializers.Serializer):
 
 class PartnershipJoinSerializer(serializers.Serializer):
     invite_code = serializers.CharField()
+
+
+class BillingVerifySerializer(serializers.Serializer):
+    platform = serializers.ChoiceField(choices=["apple", "google", "ios", "android"])
+    purchase_token = serializers.CharField()
+    product_id = serializers.CharField(required=False, allow_blank=True)
+    package_name = serializers.CharField(required=False, allow_blank=True)
 
 
 class MessageSerializer(serializers.Serializer):

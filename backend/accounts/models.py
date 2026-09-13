@@ -165,3 +165,95 @@ class PartnershipInvite(models.Model):
 
     def __str__(self):
         return f"Invite {self.email} ({self.partnership.invite_code})"
+
+
+class Membership(models.Model):
+    """Trial, store, or complimentary access. One record covers a couple when attached to a partnership."""
+
+    PLAN_MONTHLY = "monthly"
+    PLAN_YEARLY = "yearly"
+    PLAN_CHOICES = [
+        (PLAN_MONTHLY, "Monthly"),
+        (PLAN_YEARLY, "Yearly"),
+    ]
+
+    STORE_APPLE = "apple"
+    STORE_GOOGLE = "google"
+    STORE_CHOICES = [
+        (STORE_APPLE, "App Store"),
+        (STORE_GOOGLE, "Google Play"),
+    ]
+
+    partnership = models.OneToOneField(
+        Partnership,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="membership",
+    )
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="membership",
+    )
+
+    complimentary = models.BooleanField(default=False)
+    complimentary_until = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Leave blank for complimentary access that does not expire.",
+    )
+    granted_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="granted_memberships",
+    )
+    granted_at = models.DateTimeField(null=True, blank=True)
+    grant_note = models.CharField(max_length=255, blank=True)
+
+    trial_started_at = models.DateTimeField(null=True, blank=True)
+    trial_ends_at = models.DateTimeField(null=True, blank=True)
+
+    plan = models.CharField(max_length=16, choices=PLAN_CHOICES, blank=True)
+    store = models.CharField(max_length=16, choices=STORE_CHOICES, blank=True)
+    product_id = models.CharField(max_length=128, blank=True)
+    original_transaction_id = models.CharField(max_length=255, blank=True, db_index=True)
+    latest_transaction_id = models.CharField(max_length=255, blank=True)
+    purchase_token = models.TextField(blank=True)
+    auto_renewing = models.BooleanField(default=False)
+    store_expires_at = models.DateTimeField(null=True, blank=True)
+    purchased_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="store_purchases",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "accounts_membership"
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(partnership__isnull=False, user__isnull=True)
+                    | models.Q(partnership__isnull=True, user__isnull=False)
+                ),
+                name="membership_owner_xor",
+            ),
+            models.UniqueConstraint(
+                fields=["original_transaction_id"],
+                condition=~models.Q(original_transaction_id=""),
+                name="unique_store_original_transaction",
+            ),
+        ]
+
+    def __str__(self):
+        owner = self.partnership or self.user
+        return f"Membership for {owner}"

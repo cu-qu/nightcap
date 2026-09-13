@@ -3,6 +3,7 @@ import { Redirect, Stack } from "expo-router";
 import { useAuthStore } from "@/src/store/authStore";
 import { colors } from "@/src/theme/colors";
 import { needsOnboarding } from "@/src/utils/needsOnboarding";
+import { needsPaywall } from "@/src/utils/needsPaywall";
 
 export default function OnboardingLayout() {
   const hydrated = useAuthStore((s) => s.hydrated);
@@ -13,6 +14,9 @@ export default function OnboardingLayout() {
     return <Redirect href="/(auth)/login" />;
   }
   if (hydrated && isAuthenticated && !needsOnboarding(user)) {
+    if (needsPaywall(user)) {
+      return <Redirect href="/paywall" />;
+    }
     return <Redirect href="/(tabs)" />;
   }
 

@@ -56,6 +56,10 @@ Example for a phone: `EXPO_PUBLIC_API_URL=http://192.168.1.42:8000`
 
 Backend must be reachable on that host (`docker compose up` / Django on port 8000). Cleartext HTTP is allowed for Android in `app.json`.
 
+## EAS production
+
+Set `EXPO_PUBLIC_API_URL` in `eas.json` (`production.env`) before an EAS production build. The intended origin is `https://api.nightcap.app` (Terms / Privacy / Support are served from that host).
+
 ## Scripts
 
 ```bash

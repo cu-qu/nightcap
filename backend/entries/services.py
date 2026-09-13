@@ -3,6 +3,7 @@ from calendar import monthrange
 from datetime import date, timedelta
 from decimal import Decimal
 from functools import reduce
+from typing import NamedTuple
 from uuid import UUID
 
 from django.db.models import Count, Q, Sum
@@ -11,6 +12,14 @@ from django.utils import timezone
 from categories.models import TrackingCategory
 
 from .models import DayReflection, Entry, NightCap
+
+
+class _ChartRow(NamedTuple):
+    entry: Entry
+    category: TrackingCategory
+    mine: bool
+    yours_amount: Decimal
+    yours_quantity: Decimal
 
 
 def finance_totals(queryset):
@@ -340,6 +349,170 @@ def _chart_group_q(group: str) -> Q:
     return q | Q(category__group__uuid=group)
 
 
+def _category_matches_group(category: TrackingCategory, group: str) -> bool:
+    grp = category.group
+    if grp is None:
+        return False
+    if grp.key == group:
+        return True
+    try:
+        UUID(str(group))
+    except (ValueError, TypeError, AttributeError):
+        return False
+    return str(grp.uuid) == str(group)
+
+
+def _viewer_shared_categories(user) -> dict[tuple[str, str], TrackingCategory]:
+    from goals.models import Goal
+
+    goals = Goal.objects.filter(
+        user=user, is_active=True, scope=Goal.SCOPE_SHARED, accepted=True
+    ).select_related("category", "category__group")
+    return {(goal.category.name, goal.category.type): goal.category for goal in goals}
+
+
+def _shared_category_ids(user) -> set[int]:
+    return {category.id for category in _viewer_shared_categories(user).values()}
+
+
+def _chart_partner(user):
+    from accounts.partnerships import get_user_partnership
+
+    partnership = get_user_partnership(user)
+    if partnership is None:
+        return None
+    member = partnership.members.exclude(user=user).select_related("user").first()
+    return member.user if member else None
+
+
+def _entry_together_slice(
+    entry: Entry, shared_ids: set[int], category: TrackingCategory | None = None
+) -> str:
+    """Together vs solo for chart filters.
+
+    Workouts and habits use With Partner / Alone. Spend and other money
+    categories follow the Together (shared) goal on that category.
+    """
+    category = category or entry.category
+    if category.uses_completed_with():
+        if entry.completed_with == Entry.COMPLETED_WITH_PARTNER:
+            return "together"
+        return "alone"
+    if category.id in shared_ids:
+        return "together"
+    return "alone"
+
+
+def _chart_row(entry: Entry, category: TrackingCategory, viewer_id: int) -> _ChartRow:
+    mine = entry.user_id == viewer_id
+    return _ChartRow(
+        entry=entry,
+        category=category,
+        mine=mine,
+        yours_amount=entry.amount if mine and entry.amount is not None else Decimal("0"),
+        yours_quantity=(
+            entry.quantity if mine and entry.quantity is not None else Decimal("0")
+        ),
+    )
+
+
+def _dedupe_together_sessions(
+    rows: list[tuple[Entry, TrackingCategory]],
+    viewer_id: int,
+) -> list[_ChartRow]:
+    """Count one With Partner session when both people logged the same day."""
+    passthrough: list[_ChartRow] = []
+    grouped: dict[tuple, list[tuple[Entry, TrackingCategory]]] = {}
+    for entry, category in rows:
+        if not category.uses_completed_with():
+            passthrough.append(_chart_row(entry, category, viewer_id))
+            continue
+        grouped.setdefault((entry.date, category.id), []).append((entry, category))
+
+    out = list(passthrough)
+    for group in grouped.values():
+        with_partner = [
+            row
+            for row in group
+            if row[0].completed_with == Entry.COMPLETED_WITH_PARTNER
+        ]
+        alone = [
+            row
+            for row in group
+            if row[0].completed_with != Entry.COMPLETED_WITH_PARTNER
+        ]
+        if len(with_partner) >= 2:
+            kept_entry, kept_cat = max(
+                with_partner, key=lambda row: row[0].quantity or Decimal("0")
+            )
+            mine_entry = next(
+                (row[0] for row in with_partner if row[0].user_id == viewer_id),
+                None,
+            )
+            out.append(
+                _ChartRow(
+                    entry=kept_entry,
+                    category=kept_cat,
+                    mine=mine_entry is not None,
+                    yours_amount=(
+                        mine_entry.amount
+                        if mine_entry is not None and mine_entry.amount is not None
+                        else Decimal("0")
+                    ),
+                    yours_quantity=(
+                        mine_entry.quantity
+                        if mine_entry is not None and mine_entry.quantity is not None
+                        else Decimal("0")
+                    ),
+                )
+            )
+            out.extend(_chart_row(entry, category, viewer_id) for entry, category in alone)
+        else:
+            out.extend(_chart_row(entry, category, viewer_id) for entry, category in group)
+    return out
+
+
+def _chart_entry_rows(
+    user,
+    *,
+    start_date: date,
+    end_date: date,
+    group: str | None = None,
+) -> list[_ChartRow]:
+    """Own entries plus the partner's logs on Together categories."""
+    entries_qs = (
+        Entry.objects.filter(user=user, date__gte=start_date, date__lte=end_date)
+        .select_related("category", "category__group")
+        .order_by("date", "category__sort_order", "category__name")
+    )
+    if group:
+        entries_qs = entries_qs.filter(_chart_group_q(group))
+    rows = [(entry, entry.category) for entry in entries_qs]
+
+    shared_map = _viewer_shared_categories(user)
+    partner = _chart_partner(user)
+    if partner is None or not shared_map:
+        return _dedupe_together_sessions(rows, user.id)
+
+    match = reduce(
+        operator.or_,
+        (Q(category__name=name, category__type=typ) for name, typ in shared_map),
+    )
+    partner_qs = (
+        Entry.objects.filter(user=partner, date__gte=start_date, date__lte=end_date)
+        .filter(match)
+        .select_related("category", "category__group")
+    )
+    for entry in partner_qs:
+        viewer_cat = shared_map.get((entry.category.name, entry.category.type))
+        if viewer_cat is None:
+            continue
+        if group and not _category_matches_group(viewer_cat, group):
+            continue
+        rows.append((entry, viewer_cat))
+    return _dedupe_together_sessions(rows, user.id)
+
+
 def _empty_chart_bucket() -> dict:
     return {
         "entry_count": 0,
@@ -348,6 +521,7 @@ def _empty_chart_bucket() -> dict:
         "together_count": 0,
         "alone_count": 0,
         "quantity_by_unit": {},
+        "categories": {},
     }
 
 
@@ -368,8 +542,10 @@ def _finalize_quantity_units(unit_map: dict) -> list[dict]:
     return rows
 
 
-def _apply_chart_entry(bucket: dict, entry: Entry) -> None:
-    category = entry.category
+def _apply_chart_entry(
+    bucket: dict, entry: Entry, category: TrackingCategory | None = None
+) -> None:
+    category = category or entry.category
     bucket["entry_count"] += 1
     if entry.amount is not None:
         if category.type == TrackingCategory.FINANCE_EXPENSE:
@@ -385,6 +561,34 @@ def _apply_chart_entry(bucket: dict, entry: Entry) -> None:
         unit = category.unit or "count"
         unit_map = bucket["quantity_by_unit"]
         unit_map[unit] = unit_map.get(unit, Decimal("0")) + entry.quantity
+    cats = bucket["categories"]
+    cat_row = cats.get(category.id)
+    if cat_row is None:
+        cat_row = {
+            "uuid": str(category.uuid),
+            "name": category.name,
+            "emoji": (category.emoji or "").strip(),
+            "icon": category.icon or "",
+            "type": category.type,
+            "metric_kind": category.metric_kind,
+            "unit": category.unit or "",
+            "entry_count": 0,
+            "amount": Decimal("0"),
+            "quantity": Decimal("0"),
+            "together_count": 0,
+            "alone_count": 0,
+        }
+        cats[category.id] = cat_row
+    cat_row["entry_count"] += 1
+    if entry.amount is not None:
+        cat_row["amount"] += entry.amount
+    if entry.quantity is not None:
+        cat_row["quantity"] += entry.quantity
+    if category.uses_completed_with():
+        if entry.completed_with == Entry.COMPLETED_WITH_PARTNER:
+            cat_row["together_count"] += 1
+        else:
+            cat_row["alone_count"] += 1
 
 
 def _point_payload(bucket: dict, *, day: date | None, week_start: date | None) -> dict:
@@ -397,6 +601,10 @@ def _point_payload(bucket: dict, *, day: date | None, week_start: date | None) -
         "together_count": bucket["together_count"],
         "alone_count": bucket["alone_count"],
         "quantity_by_unit": _finalize_quantity_units(bucket["quantity_by_unit"]),
+        "by_category": sorted(
+            bucket.get("categories", {}).values(),
+            key=lambda row: (-row["amount"], -row["quantity"], row["name"]),
+        ),
     }
 
 
@@ -422,6 +630,9 @@ def _chart_category_row(category: TrackingCategory, stats: dict) -> dict:
         "quantity_total": stats["quantity_total"],
         "together_count": stats["together_count"],
         "alone_count": stats["alone_count"],
+        "yours_amount": stats["yours_amount"],
+        "yours_quantity": stats["yours_quantity"],
+        "yours_entry_count": stats["yours_entry_count"],
     }
 
 
@@ -448,6 +659,7 @@ def chart_series(
     start_date: date | None = None,
     end_date: date | None = None,
     group: str | None = None,
+    with_filter: str | None = None,
 ) -> dict:
     today = timezone.localdate()
     if period == "daily":
@@ -462,13 +674,17 @@ def chart_series(
             week_start = end_date - timedelta(days=end_date.weekday())
             start_date = week_start - timedelta(weeks=7)
 
-    entries_qs = (
-        Entry.objects.filter(user=user, date__gte=start_date, date__lte=end_date)
-        .select_related("category", "category__group")
-        .order_by("date", "category__sort_order", "category__name")
+    rows = _chart_entry_rows(
+        user, start_date=start_date, end_date=end_date, group=group
     )
-    if group:
-        entries_qs = entries_qs.filter(_chart_group_q(group))
+    shared_ids = _shared_category_ids(user)
+    if with_filter:
+        rows = [
+            row
+            for row in rows
+            if _entry_together_slice(row.entry, shared_ids, row.category)
+            == with_filter
+        ]
 
     point_buckets: dict[date, dict] = {}
     category_stats: dict[int, dict] = {}
@@ -476,12 +692,13 @@ def chart_series(
     together_total = 0
     alone_total = 0
 
-    for entry in entries_qs:
+    for row in rows:
+        entry = row.entry
+        category = row.category
         bucket_key = entry.date if period == "daily" else _chart_week_start(entry.date)
         bucket = point_buckets.setdefault(bucket_key, _empty_chart_bucket())
-        _apply_chart_entry(bucket, entry)
+        _apply_chart_entry(bucket, entry, category)
 
-        category = entry.category
         cat_row = category_stats.get(category.id)
         if cat_row is None:
             cat_row = {
@@ -491,6 +708,9 @@ def chart_series(
                 "quantity_total": Decimal("0"),
                 "together_count": 0,
                 "alone_count": 0,
+                "yours_amount": Decimal("0"),
+                "yours_quantity": Decimal("0"),
+                "yours_entry_count": 0,
             }
             category_stats[category.id] = cat_row
         cat_row["entry_count"] += 1
@@ -498,6 +718,10 @@ def chart_series(
             cat_row["amount_total"] += entry.amount
         if entry.quantity is not None:
             cat_row["quantity_total"] += entry.quantity
+        if row.mine:
+            cat_row["yours_amount"] += row.yours_amount
+            cat_row["yours_quantity"] += row.yours_quantity
+            cat_row["yours_entry_count"] += 1
         if category.uses_completed_with():
             if entry.completed_with == Entry.COMPLETED_WITH_PARTNER:
                 cat_row["together_count"] += 1
@@ -606,7 +830,7 @@ def shared_ritual_hints(user, ritual_date: date) -> dict:
     partnership = get_user_partnership(user)
     shared_goals = list(
         Goal.objects.filter(
-            user=user, is_active=True, scope=Goal.SCOPE_SHARED
+            user=user, is_active=True, scope=Goal.SCOPE_SHARED, accepted=True
         ).select_related("category")
     )
     shared_uuids = [goal.category.uuid for goal in shared_goals]

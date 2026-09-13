@@ -1,6 +1,24 @@
 import { apiRequest } from "@/src/api/client";
 import type { GoalScope, GoalTemplate, GoalTemplateGroup, Partnership } from "@/src/types/api";
 
+export type TogetherGoal = {
+  uuid: string;
+  name: string;
+  category_name: string;
+  category_emoji: string;
+  category_icon: string;
+  category_type: string;
+  category_unit: string;
+  group: GoalTemplateGroup;
+  period: "daily" | "weekly" | "monthly";
+  direction: "max" | "min";
+  target_value: string;
+  target_label: string;
+  template_slug: string;
+  proposed_by_username: string;
+  accepted: boolean;
+};
+
 export type OnboardingStatus = {
   onboarding_completed: boolean;
   onboarding_completed_at: string | null;
@@ -8,6 +26,7 @@ export type OnboardingStatus = {
   active_goal_count: number;
   available_template_count: number;
   inherited_shared_templates: string[];
+  together_goals: TogetherGoal[];
   partnership: Partnership | null;
 };
 
@@ -34,6 +53,7 @@ export async function setupOnboarding(input: {
   mode: "solo" | "couple";
   templates: TemplateSelection[];
   invite_email?: string;
+  approve_together?: string[];
 }): Promise<{
   created_goal_count: number;
   email_sent: boolean;
@@ -47,6 +67,7 @@ export async function setupOnboarding(input: {
       templates: input.templates,
       invite_email: input.invite_email ?? "",
       mark_complete: true,
+      ...(input.approve_together ? { approve_together: input.approve_together } : {}),
     },
   });
 }

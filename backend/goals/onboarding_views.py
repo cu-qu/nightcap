@@ -1,5 +1,7 @@
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.permissions import IsAuthenticated
+
+from core.permissions import HasActiveMembership
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -21,7 +23,7 @@ from goals.serializers import GoalSerializer
 
 
 class OnboardingTemplateListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     @extend_schema(
         tags=["Onboarding"],
@@ -66,7 +68,7 @@ class OnboardingTemplateListView(APIView):
 
 
 class OnboardingApplyView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     @extend_schema(
         tags=["Onboarding"],
@@ -104,7 +106,7 @@ class OnboardingApplyView(APIView):
 
 
 class OnboardingSetupView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     @extend_schema(
         tags=["Onboarding"],
@@ -125,6 +127,9 @@ class OnboardingSetupView(APIView):
             mode=data["mode"],
             templates=list(data.get("templates") or []),
             invite_email=data.get("invite_email") or "",
+            approve_together=(
+                data["approve_together"] if "approve_together" in data else None
+            ),
         )
         goals = result["created_goals"] + result["updated_goals"]
         return Response(
@@ -141,7 +146,7 @@ class OnboardingSetupView(APIView):
 
 
 class OnboardingStatusView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     @extend_schema(
         tags=["Onboarding"],
@@ -153,7 +158,7 @@ class OnboardingStatusView(APIView):
 
 
 class OnboardingCompleteView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     @extend_schema(
         tags=["Onboarding"],

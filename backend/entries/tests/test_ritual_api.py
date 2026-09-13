@@ -384,6 +384,14 @@ class RitualApiTests(TestCase):
         self.assertEqual(today_point["together_count"], 1)
         units = {row["unit"]: row["total"] for row in today_point["quantity_by_unit"]}
         self.assertEqual(units["glasses"], "6.00")
+        point_names = {row["name"] for row in today_point["by_category"]}
+        self.assertEqual(point_names, {"Groceries", "Water", "Workout"})
+        groc_day = next(row for row in today_point["by_category"] if row["name"] == "Groceries")
+        self.assertEqual(groc_day["amount"], "15.00")
+        workout_day = next(row for row in today_point["by_category"] if row["name"] == "Workout")
+        self.assertEqual(workout_day["together_count"], 1)
+        water_day = next(row for row in today_point["by_category"] if row["name"] == "Water")
+        self.assertEqual(water_day["alone_count"], 1)
 
     def test_charts_filter_by_group(self):
         today = date.today()
@@ -414,6 +422,183 @@ class RitualApiTests(TestCase):
         self.assertEqual(data["by_group"][0]["key"], "daily_spend")
         today_point = next(p for p in data["points"] if p["date"] == today.isoformat())
         self.assertEqual(today_point["expense_total"], "9.00")
+
+    def test_charts_filter_together_and_solo(self):
+        from goals.models import Goal
+
+        today = date.today()
+        food = TrackingCategory.objects.get(user=self.user, name="Fast Food")
+        Goal.objects.create(
+            user=self.user,
+            category=self.spend,
+            target_value=Decimal("400.00"),
+            scope=Goal.SCOPE_SHARED,
+        )
+        Entry.objects.create(
+            user=self.user,
+            category=self.spend,
+            date=today,
+            amount=Decimal("91.00"),
+        )
+        Entry.objects.create(
+            user=self.user,
+            category=food,
+            date=today,
+            amount=Decimal("23.00"),
+        )
+        Entry.objects.create(
+            user=self.user,
+            category=self.workout,
+            date=today,
+            quantity=Decimal("1"),
+            completed_with=Entry.COMPLETED_WITH_PARTNER,
+        )
+        Entry.objects.create(
+            user=self.user,
+            category=self.water,
+            date=today,
+            quantity=Decimal("6"),
+        )
+        params = {
+            "period": "daily",
+            "start_date": today.replace(day=1).isoformat(),
+            "end_date": today.isoformat(),
+        }
+        together = self.client.get(
+            "/api/v1/charts/", {**params, "with_filter": "together"}
+        )
+        self.assertEqual(together.status_code, 200)
+        together_names = {row["name"] for row in together.json()["by_category"]}
+        self.assertEqual(together_names, {"Groceries", "Workout"})
+        together_day = next(
+            p
+            for p in together.json()["points"]
+            if p["date"] == today.isoformat()
+        )
+        self.assertEqual(together_day["expense_total"], "91.00")
+
+        alone = self.client.get(
+            "/api/v1/charts/", {**params, "with_filter": "alone"}
+        )
+        self.assertEqual(alone.status_code, 200)
+        alone_names = {row["name"] for row in alone.json()["by_category"]}
+        self.assertEqual(alone_names, {"Fast Food", "Water"})
+        alone_day = next(
+            p for p in alone.json()["points"] if p["date"] == today.isoformat()
+        )
+        self.assertEqual(alone_day["expense_total"], "23.00")
+
+    def test_charts_include_linked_partner_together_entries(self):
+        from accounts.partnerships import accept_invite_code, ensure_partnership
+        from goals.models import Goal
+
+        partnership = ensure_partnership(self.user)
+        Goal.objects.create(
+            user=self.user,
+            category=self.spend,
+            target_value=Decimal("400.00"),
+            scope=Goal.SCOPE_SHARED,
+            partnership=partnership,
+        )
+        Goal.objects.create(
+            user=self.user,
+            category=self.workout,
+            target_value=Decimal("3.00"),
+            scope=Goal.SCOPE_SHARED,
+            partnership=partnership,
+        )
+        today = date.today()
+        Entry.objects.create(
+            user=self.user,
+            category=self.spend,
+            date=today,
+            amount=Decimal("50.00"),
+        )
+        Entry.objects.create(
+            user=self.user,
+            category=self.workout,
+            date=today,
+            quantity=Decimal("1"),
+            completed_with=Entry.COMPLETED_WITH_PARTNER,
+        )
+        food = TrackingCategory.objects.get(user=self.user, name="Fast Food")
+        Entry.objects.create(
+            user=self.user,
+            category=food,
+            date=today,
+            amount=Decimal("12.00"),
+        )
+
+        partner = User.objects.create_user(
+            username="chartpartner",
+            email="chartpartner@example.com",
+            password="testpass123",
+        )
+        create_default_categories_for_user(partner)
+        accept_invite_code(partner, partnership.invite_code)
+        Goal.objects.filter(
+            user=partner,
+            is_active=True,
+            scope=Goal.SCOPE_SHARED,
+            accepted=False,
+        ).update(accepted=True)
+
+        partner_client = APIClient()
+        partner_client.force_authenticate(user=partner)
+        params = {
+            "period": "daily",
+            "start_date": today.replace(day=1).isoformat(),
+            "end_date": today.isoformat(),
+        }
+        resp = partner_client.get("/api/v1/charts/", params)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        names = {row["name"] for row in resp.json()["by_category"]}
+        self.assertEqual(names, {"Groceries", "Workout"})
+        groc = next(row for row in resp.json()["by_category"] if row["name"] == "Groceries")
+        self.assertEqual(groc["amount_total"], "50.00")
+        workout = next(row for row in resp.json()["by_category"] if row["name"] == "Workout")
+        self.assertEqual(workout["together_count"], 1)
+        today_point = next(
+            p for p in resp.json()["points"] if p["date"] == today.isoformat()
+        )
+        self.assertEqual(today_point["expense_total"], "50.00")
+
+        together = partner_client.get(
+            "/api/v1/charts/", {**params, "with_filter": "together"}
+        )
+        self.assertEqual(together.status_code, 200)
+        together_names = {row["name"] for row in together.json()["by_category"]}
+        self.assertEqual(together_names, {"Groceries", "Workout"})
+        together_groc = next(
+            row for row in together.json()["by_category"] if row["name"] == "Groceries"
+        )
+        self.assertEqual(together_groc["amount_total"], "50.00")
+
+        partner_groc = TrackingCategory.objects.get(user=partner, name="Groceries")
+        Entry.objects.create(
+            user=partner,
+            category=partner_groc,
+            date=today,
+            amount=Decimal("20.00"),
+        )
+        summed = partner_client.get("/api/v1/charts/", params)
+        groc = next(row for row in summed.json()["by_category"] if row["name"] == "Groceries")
+        self.assertEqual(groc["amount_total"], "70.00")
+        self.assertEqual(groc["yours_amount"], "20.00")
+
+        mine = self.client.get("/api/v1/charts/", params)
+        groc = next(row for row in mine.json()["by_category"] if row["name"] == "Groceries")
+        self.assertEqual(groc["amount_total"], "70.00")
+        self.assertEqual(groc["yours_amount"], "50.00")
+        workout = next(
+            row for row in mine.json()["by_category"] if row["name"] == "Workout"
+        )
+        self.assertEqual(workout["yours_quantity"], "1.00")
+        partner_workout = next(
+            row for row in summed.json()["by_category"] if row["name"] == "Workout"
+        )
+        self.assertEqual(partner_workout["quantity_total"], "1.00")
+        self.assertEqual(partner_workout["yours_quantity"], "0.00")
 
     def test_entry_exposes_uuid(self):
         resp = self.client.post(

@@ -12,6 +12,8 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+
+from core.permissions import HasActiveMembership
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -36,10 +38,16 @@ from .serializers import (
     NightCapSerializer,
     NightCapWriteSerializer,
     PeriodSummaryQuerySerializer,
+    RecapIndexResponseSerializer,
+    RecapMonthQuerySerializer,
+    RecapMonthResponseSerializer,
+    RecapYearQuerySerializer,
+    RecapYearResponseSerializer,
     RitualRequestSerializer,
     RitualResponseSerializer,
     SharedRitualResponseSerializer,
 )
+from .recaps import build_month_recap, build_year_recap, list_available_recaps
 from .services import (
     build_daily_summary,
     calendar_month,
@@ -100,7 +108,7 @@ def _period_bounds(period: str, reference_date=None):
 )
 class EntryViewSet(viewsets.ModelViewSet):
     serializer_class = EntrySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
     queryset = Entry.objects.none()
     filterset_class = EntryFilter
     filter_backends = [
@@ -209,7 +217,7 @@ class EntryViewSet(viewsets.ModelViewSet):
     responses={200: DashboardResponseSerializer},
 )
 class DashboardView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     def get(self, request):
         today = timezone.localdate()
@@ -257,7 +265,7 @@ class DashboardView(APIView):
     responses={status.HTTP_200_OK: ExportResponseSerializer},
 )
 class ExportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     def post(self, request):
         categories = TrackingCategory.objects.filter(user=request.user).order_by("type", "name")
@@ -287,7 +295,7 @@ class ExportView(APIView):
     responses={200: RitualResponseSerializer},
 )
 class RitualView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     def post(self, request):
         serializer = RitualRequestSerializer(
@@ -341,7 +349,7 @@ class RitualView(APIView):
     responses={200: SharedRitualResponseSerializer},
 )
 class RitualSharedView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     def get(self, request):
         query = DailySummaryQuerySerializer(data=request.query_params)
@@ -363,7 +371,7 @@ class RitualSharedView(APIView):
     destroy=extend_schema(tags=["NightCaps"], summary="Delete NightCap"),
 )
 class NightCapViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
     queryset = NightCap.objects.none()
     lookup_field = "date"
     lookup_value_regex = r"\d{4}-\d{2}-\d{2}"
@@ -524,7 +532,7 @@ class NightCapViewSet(viewsets.ModelViewSet):
     summary="Get or update day reflection (legacy; prefer NightCaps)",
 )
 class DayReflectionDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     def get_object(self, user, reflection_date):
         nightcap = get_or_create_nightcap(user, reflection_date)
@@ -614,7 +622,7 @@ class DayReflectionDetailView(APIView):
     responses={200: CalendarResponseSerializer},
 )
 class CalendarView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     def get(self, request):
         query = CalendarQuerySerializer(data=request.query_params)
@@ -656,11 +664,19 @@ class CalendarView(APIView):
             required=False,
             description="Category group key or UUID to filter the series.",
         ),
+        OpenApiParameter(
+            name="with_filter",
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            enum=["together", "alone"],
+            description="Together (shared goals / with partner) or solo activity.",
+        ),
     ],
     responses={200: ChartResponseSerializer},
 )
 class ChartsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
 
     def get(self, request):
         query = ChartQuerySerializer(data=request.query_params)
@@ -672,5 +688,61 @@ class ChartsView(APIView):
             start_date=data.get("start_date"),
             end_date=data.get("end_date"),
             group=data.get("group") or None,
+            with_filter=data.get("with_filter") or None,
         )
         return Response(ChartResponseSerializer(payload).data)
+
+
+@extend_schema(
+    tags=["Recaps"],
+    summary="Available recaps (past months/years, plus a first-week highlight)",
+    responses={200: RecapIndexResponseSerializer},
+)
+class RecapIndexView(APIView):
+    permission_classes = [IsAuthenticated, HasActiveMembership]
+
+    def get(self, request):
+        payload = list_available_recaps(request.user)
+        return Response(RecapIndexResponseSerializer(payload).data)
+
+
+@extend_schema(
+    tags=["Recaps"],
+    summary="Month Recap from NightCaps and daily check-ins",
+    parameters=[
+        OpenApiParameter(name="year", type=int, location=OpenApiParameter.QUERY, required=False),
+        OpenApiParameter(name="month", type=int, location=OpenApiParameter.QUERY, required=False),
+    ],
+    responses={200: RecapMonthResponseSerializer},
+)
+class RecapMonthView(APIView):
+    permission_classes = [IsAuthenticated, HasActiveMembership]
+
+    def get(self, request):
+        query = RecapMonthQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        today = timezone.localdate()
+        year = query.validated_data.get("year") or today.year
+        month = query.validated_data.get("month") or today.month
+        payload = build_month_recap(request.user, year, month, request)
+        return Response(RecapMonthResponseSerializer(payload).data)
+
+
+@extend_schema(
+    tags=["Recaps"],
+    summary="Year Recap walking through the seasons",
+    parameters=[
+        OpenApiParameter(name="year", type=int, location=OpenApiParameter.QUERY, required=False),
+    ],
+    responses={200: RecapYearResponseSerializer},
+)
+class RecapYearView(APIView):
+    permission_classes = [IsAuthenticated, HasActiveMembership]
+
+    def get(self, request):
+        query = RecapYearQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        today = timezone.localdate()
+        year = query.validated_data.get("year") or today.year
+        payload = build_year_recap(request.user, year, request)
+        return Response(RecapYearResponseSerializer(payload).data)

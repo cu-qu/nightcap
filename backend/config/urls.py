@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from core.legal import PrivacyPolicyView, SupportView, TermsOfServiceView
 from core.views import HealthCheckView
 
 
@@ -16,16 +17,23 @@ def root(request):
             "schema": "/api/schema/",
             "health": "/api/health/",
             "api_v1": "/api/v1/",
+            "privacy": "/privacy/",
+            "terms": "/terms/",
+            "support": "/support/",
         }
     )
 
 
 urlpatterns = [
     path("", root),
+    path("privacy/", PrivacyPolicyView.as_view(), name="privacy"),
+    path("terms/", TermsOfServiceView.as_view(), name="terms"),
+    path("support/", SupportView.as_view(), name="support"),
     path("admin/", admin.site.urls),
     path("api/auth/", include("accounts.urls")),
     path("api/v1/auth/", include("accounts.urls")),
     path("api/v1/", include("accounts.partnership_urls")),
+    path("api/v1/", include("accounts.billing_urls")),
     path("api/v1/categories/", include("categories.urls")),
     path("api/v1/category-groups/", include("categories.group_urls")),
     path("api/v1/", include("goals.urls")),

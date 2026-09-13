@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    DeleteAccountView,
     MeView,
     PasswordResetConfirmView,
     PasswordResetRequestView,
@@ -34,4 +35,5 @@ urlpatterns = [
     path("token/refresh/", TokenRefreshViewCustom.as_view(), name="token_refresh"),
     path("me/", MeView.as_view(), name="me"),
     path("profile/", ProfileView.as_view(), name="profile"),
+    path("account/", DeleteAccountView.as_view(), name="auth-delete-account"),
 ]

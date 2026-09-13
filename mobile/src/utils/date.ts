@@ -67,6 +67,14 @@ export function monthLabel(year: number, month: number): string {
   });
 }
 
+export function previousMonth(
+  year: number,
+  month: number
+): { year: number; month: number } {
+  const d = new Date(year, month - 2, 1);
+  return { year: d.getFullYear(), month: d.getMonth() + 1 };
+}
+
 export function weekRangeLabel(start: Date, end: Date): string {
   const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
   return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`;

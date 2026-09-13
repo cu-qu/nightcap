@@ -79,6 +79,11 @@ class OnboardingSetupSerializer(serializers.Serializer):
     mode = serializers.ChoiceField(choices=UserProfile.MODE_CHOICES)
     templates = OnboardingTemplateSelectionSerializer(many=True, required=False)
     invite_email = serializers.EmailField(required=False, allow_blank=True)
+    approve_together = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        help_text="UUIDs of Together goals this user is approving.",
+    )
     mark_complete = serializers.BooleanField(default=True)
 
     def validate_templates(self, value):
@@ -103,4 +108,5 @@ class OnboardingStatusSerializer(serializers.Serializer):
     active_goal_count = serializers.IntegerField()
     available_template_count = serializers.IntegerField()
     inherited_shared_templates = serializers.ListField(child=serializers.CharField())
+    together_goals = serializers.ListField(child=serializers.JSONField())
     partnership = serializers.JSONField(allow_null=True)

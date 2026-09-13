@@ -1,6 +1,6 @@
 import "../global.css";
 
-import { DarkTheme, Stack, ThemeProvider, router } from "expo-router";
+import { DarkTheme, Stack, ThemeProvider, router, usePathname } from "expo-router";
 import * as Notifications from "expo-notifications";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -22,6 +22,7 @@ import { useRitualDraftStore } from "@/src/store/ritualDraftStore";
 import { colors } from "@/src/theme/colors";
 import { todayIso } from "@/src/utils/date";
 import { needsOnboarding } from "@/src/utils/needsOnboarding";
+import { needsPaywall } from "@/src/utils/needsPaywall";
 
 export { ErrorBoundary } from "expo-router";
 
@@ -57,6 +58,10 @@ function useReminderObserver() {
         router.push("/(onboarding)");
         return;
       }
+      if (needsPaywall(user)) {
+        router.push("/paywall");
+        return;
+      }
       useRitualDraftStore.getState().beginForDate(todayIso());
       router.push(REMINDER_PATH);
     }
@@ -73,6 +78,23 @@ function useReminderObserver() {
     );
     return () => subscription.remove();
   }, []);
+}
+
+function MembershipRedirect() {
+  const pathname = usePathname();
+  const hydrated = useAuthStore((s) => s.hydrated);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
+
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated) return;
+    if (needsOnboarding(user)) return;
+    if (!needsPaywall(user)) return;
+    if (pathname === "/paywall") return;
+    router.replace("/paywall");
+  }, [hydrated, isAuthenticated, user, pathname]);
+
+  return null;
 }
 
 export default function RootLayout() {
@@ -133,6 +155,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={NightCapTheme}>
       <StatusBar style="light" />
+      <MembershipRedirect />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -142,6 +165,7 @@ export default function RootLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(onboarding)" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="paywall" />
         <Stack.Screen
           name="ritual/spend"
           options={{
@@ -157,6 +181,29 @@ export default function RootLayout() {
           name="ritual/follow-up"
           options={{
             headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="recap/archive"
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="recap/month"
+          options={{
+            headerShown: false,
+            animation: "fade",
+            presentation: "card",
+          }}
+        />
+        <Stack.Screen
+          name="recap/year"
+          options={{
+            headerShown: false,
+            animation: "fade",
+            presentation: "card",
           }}
         />
       </Stack>

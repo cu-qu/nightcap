@@ -63,6 +63,35 @@ export type User = {
   onboarding_completed?: boolean;
   tracking_mode?: "solo" | "couple";
   partnership?: Partnership | null;
+  membership?: Membership | null;
+};
+
+export type MembershipStatus = "trial" | "active" | "complimentary" | "expired";
+
+export type Membership = {
+  status: MembershipStatus;
+  is_active: boolean;
+  plan: "monthly" | "yearly" | null;
+  source: "trial" | "store" | "complimentary" | "none";
+  trial_ends_at: string | null;
+  expires_at: string | null;
+  auto_renewing: boolean;
+  covers_couple: boolean;
+  product_id: string | null;
+};
+
+export type BillingProduct = {
+  id: string;
+  plan: "monthly" | "yearly";
+  price: string;
+  period: "month" | "year";
+  label: string;
+  trial_days: number;
+};
+
+export type BillingResponse = {
+  membership: Membership;
+  products: BillingProduct[];
 };
 
 export type PartnershipMember = {
@@ -246,6 +275,21 @@ export type ChartQuantityUnit = {
   total: string;
 };
 
+export type ChartPointCategory = {
+  uuid: string;
+  name: string;
+  emoji?: string;
+  icon?: string;
+  type?: CategoryType;
+  metric_kind?: MetricKind;
+  unit?: string;
+  entry_count: number;
+  amount: string;
+  quantity: string;
+  together_count?: number;
+  alone_count?: number;
+};
+
 export type ChartPoint = {
   date?: string | null;
   week_start?: string | null;
@@ -255,6 +299,7 @@ export type ChartPoint = {
   together_count?: number;
   alone_count?: number;
   quantity_by_unit?: ChartQuantityUnit[];
+  by_category?: ChartPointCategory[];
 };
 
 export type ChartCategory = {
@@ -274,6 +319,9 @@ export type ChartCategory = {
   quantity_total: string;
   together_count?: number;
   alone_count?: number;
+  yours_amount?: string;
+  yours_quantity?: string;
+  yours_entry_count?: number;
   category__uuid?: string;
   category__name?: string;
   category__type?: string;
@@ -357,6 +405,128 @@ export type CategoryGroupUpdateInput = Partial<{
   icon: string;
   show_in_ritual: boolean;
 }>;
+
+export type RecapKind = "month" | "year";
+
+export type RecapSlideType =
+  | "cover"
+  | "stat"
+  | "photos"
+  | "moments"
+  | "logged"
+  | "moods"
+  | "together"
+  | "season"
+  | "close";
+
+export type RecapPhoto = {
+  date: string;
+  favorite_moment: string;
+  mood: string;
+  photo_url: string | null;
+};
+
+export type RecapMoment = {
+  date: string;
+  text: string;
+  mood: string;
+  has_photo: boolean;
+  photo_url?: string | null;
+};
+
+export type RecapMood = {
+  mood: string;
+  count: number;
+};
+
+export type RecapCategoryRollup = {
+  name: string;
+  emoji: string;
+  icon: string;
+  type: CategoryType;
+  metric_kind: MetricKind;
+  unit: string;
+  entry_count: number;
+  amount: string;
+  quantity: string;
+};
+
+export type RecapSlide = {
+  type: RecapSlideType;
+  eyebrow?: string;
+  title?: string;
+  body?: string;
+  stat?: string;
+  label?: string;
+  season_key?: string;
+  photos?: RecapPhoto[];
+  moments?: RecapMoment[];
+  moods?: RecapMood[];
+  categories?: RecapCategoryRollup[];
+  expense_total?: string;
+};
+
+export type RecapSnapshot = {
+  start_date: string;
+  end_date: string;
+  day_count: number;
+  nights_logged: number;
+  nights_completed: number;
+  photo_count: number;
+  photos: RecapPhoto[];
+  moments: RecapMoment[];
+  moods: RecapMood[];
+  categories: RecapCategoryRollup[];
+  expense_total: string;
+  income_total: string;
+  habit_days: number;
+  together_days: number;
+};
+
+export type RecapSeason = RecapSnapshot & {
+  key: string;
+  name: string;
+  tagline: string;
+};
+
+export type RecapMonthResponse = {
+  kind: "month";
+  year: number;
+  month: number;
+  title: string;
+  snapshot: RecapSnapshot;
+  slides: RecapSlide[];
+};
+
+export type RecapYearResponse = {
+  kind: "year";
+  year: number;
+  title: string;
+  snapshot: RecapSnapshot;
+  seasons: RecapSeason[];
+  slides: RecapSlide[];
+};
+
+export type RecapMonthSummary = {
+  year: number;
+  month: number;
+  nights_logged: number;
+  title: string;
+};
+
+export type RecapYearSummary = {
+  year: number;
+  nights_logged: number;
+  title: string;
+};
+
+export type RecapIndexResponse = {
+  highlight_days: number;
+  featured_month: RecapMonthSummary | null;
+  featured_year: RecapYearSummary | null;
+  months: RecapMonthSummary[];
+  years: RecapYearSummary[];
+};
 
 export const SPEND_GROUP_KEY = "daily_spend";
 /** Stable key for the default Health group. */

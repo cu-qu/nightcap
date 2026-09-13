@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from .deletion import delete_user_account
 from .models import UserProfile
 from .serializers import (
     EmailVerifiedSerializer,
@@ -71,7 +72,11 @@ class MeView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return (
-            User.objects.select_related("profile", "partnership_membership__partnership")
+            User.objects.select_related(
+                "profile",
+                "partnership_membership__partnership",
+                "membership",
+            )
             .get(pk=self.request.user.pk)
         )
 
@@ -220,3 +225,21 @@ class PasswordResetConfirmView(APIView):
             {"detail": "Password has been reset. You can sign in with your new password."},
             status=status.HTTP_200_OK,
         )
+
+
+@extend_schema(
+    tags=["Auth"],
+    summary="Delete account",
+    description=(
+        "Leaves any couple space, removes NightCap data and stored photos, "
+        "and soft-deletes the account. Works even if membership has expired."
+    ),
+    request=None,
+    responses={204: None},
+)
+class DeleteAccountView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        delete_user_account(request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)

@@ -11,7 +11,23 @@ All mobile endpoints live under `/api/v1/` and require `Authorization: Bearer <a
 1. `POST /api/v1/auth/register/` — `{ username, email, password, invite_code? }` → `{ user, access, refresh }` and seeds default ritual categories. `user` includes `onboarding_completed`, `tracking_mode`, and `partnership`.
 2. `POST /api/v1/auth/token/` — `{ email or username, password }` → `{ access, refresh }`.
 3. `POST /api/v1/auth/token/refresh/` — `{ refresh }` → new `access`.
-4. `GET/PATCH /api/v1/auth/me/` and `/api/v1/auth/profile/`.
+4. `GET/PATCH /api/v1/auth/me/` and `/api/v1/auth/profile/`. `user` includes `membership` (`status`, `is_active`, `plan`, `trial_ends_at`, `expires_at`, `covers_couple`).
+
+## Billing (couple membership)
+
+One subscription covers both people in a couple space. New accounts get a **30-day free trial**. After that, subscribe through the App Store / Play Store ($2 / month or $10 / year). Staff can grant complimentary access in Django admin (`Grant complimentary membership`) or:
+
+```bash
+python manage.py grant_membership --email friend@example.com --note "beta"
+python manage.py grant_membership --username friend --revoke
+```
+
+- `GET /api/v1/billing/` — membership + product catalog (`com.nightcap.app.couple.monthly`, `com.nightcap.app.couple.yearly`)
+- `POST /api/v1/billing/verify/` — `{ platform: "apple"|"google", purchase_token, product_id? }` verifies StoreKit 2 JWS or Play purchase token and entitles the couple
+- `POST /api/v1/billing/apple-notifications/` — App Store Server Notification V2 (no auth; signed payload)
+
+`membership.status` is `trial` | `active` | `complimentary` | `expired`. Gate the client on `is_active`.
+
 
 ## Couple space & onboarding
 
@@ -20,6 +36,7 @@ NightCap is couple habit tracking with personal goals.
 - `GET/POST /api/v1/partnership/` — current couple space (`invite_code`, members) or create one
 - `POST /api/v1/partnership/invite/` — `{ email? }` share code; emails if provided
 - `POST /api/v1/partnership/join/` — `{ invite_code }` copies shared goals onto the joining account
+- `POST /api/v1/partnership/leave/` — unlink; together goals become personal; remaining partner keeps a new invite code
 - `GET /api/v1/onboarding/templates/?mode=solo|couple` — spend / workout / habit starters (`Together` vs `Just me` via `suggested_scope`)
 - `POST /api/v1/onboarding/setup/` — `{ mode, templates: [{ slug, scope?, target_value? }], invite_email? }` creates the couple space if needed, applies goals, marks onboarding complete
 
@@ -226,6 +243,61 @@ Each day includes NightCap mood plus a **groups** summary for category groups th
 Defaults: daily = current month; weekly = last 8 weeks.
 
 Response includes `points[]` (`date` or `week_start`, totals, `entry_count`) and `by_category` rollup.
+
+## Recaps
+
+Story-style look-backs assembled from NightCaps (photos, favorite moments, moods) and daily check-in entries.
+
+`GET /api/v1/recaps/` — index of **past** months/years that have NightCaps. `featured_month` is last month during the first 7 days of a new month; `featured_year` is last year during Jan 1–7. Otherwise those fields are `null`. Current month is never listed.
+
+Home shows the featured recap for that first week. Settings → Recaps lists every past month and year.
+
+`GET /api/v1/recaps/month/?year=2026&month=8`  
+Defaults to the current month. Future months return an empty snapshot.
+
+```json
+{
+  "kind": "month",
+  "year": 2026,
+  "month": 8,
+  "title": "August 2026",
+  "snapshot": {
+    "start_date": "2026-08-01",
+    "end_date": "2026-08-31",
+    "nights_logged": 22,
+    "photo_count": 8,
+    "photos": [
+      {
+        "date": "2026-08-03",
+        "favorite_moment": "Sunset on the walk home.",
+        "mood": "🙂",
+        "photo_url": "http://localhost:8000/api/v1/nightcaps/2026-08-03/photo/?t=…"
+      }
+    ],
+    "moments": [{ "date": "2026-08-03", "text": "Sunset on the walk home.", "mood": "🙂", "has_photo": true }],
+    "moods": [{ "mood": "🙂", "count": 12 }],
+    "categories": [
+      {
+        "name": "Groceries",
+        "emoji": "🛒",
+        "entry_count": 9,
+        "amount": "240.10",
+        "quantity": "0.00"
+      }
+    ],
+    "expense_total": "420.10",
+    "habit_days": 14,
+    "together_days": 6
+  },
+  "slides": [
+    { "type": "cover", "eyebrow": "Month Recap", "title": "August 2026" },
+    { "type": "photos", "title": "Favorite frames", "photos": [] }
+  ]
+}
+```
+
+`GET /api/v1/recaps/year/?year=2026`  
+Walks meteorological seasons in the calendar year: Winter (Jan–Feb), Spring, Summer, Fall, then December as “Winter again”. Seasons still in the future are omitted. Each season has the same snapshot shape as a month recap. `slides` is a tap-through including a `season` chapter for each stretch that had NightCaps.
 
 ## Goals (simple, one category each)
 
@@ -439,7 +511,9 @@ Ungrouped goals appear under `"name": "Ungrouped"` only when present.
 4. Month tab → `GET /api/v1/calendar/` (includes `has_nightcap` / `nightcap_status`).
 5. Or open a day → `GET /api/v1/nightcaps/{date}/`.
 6. Graphs → `GET /api/v1/charts/?period=daily|weekly`.
-7. Goals → `GET /api/v1/goals/group-summary/?period=weekly|monthly` (health by group), or `GET /api/v1/goals/` for the flat list.
+7. Month Recap → `GET /api/v1/recaps/month/?year=&month=` (photos, moments, logged items).
+8. Year Recap → `GET /api/v1/recaps/year/?year=` (walks Winter → Spring → Summer → Fall).
+9. Goals → `GET /api/v1/goals/group-summary/?period=weekly|monthly` (health by group), or `GET /api/v1/goals/` for the flat list.
 
 ## Related docs
 

@@ -4,6 +4,7 @@ import { Text } from "react-native";
 import { useAuthStore } from "@/src/store/authStore";
 import { colors } from "@/src/theme/colors";
 import { needsOnboarding } from "@/src/utils/needsOnboarding";
+import { needsPaywall } from "@/src/utils/needsPaywall";
 
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
   return (
@@ -21,6 +22,9 @@ export default function TabsLayout() {
   }
   if (hydrated && isAuthenticated && needsOnboarding(user)) {
     return <Redirect href="/(onboarding)" />;
+  }
+  if (hydrated && isAuthenticated && needsPaywall(user)) {
+    return <Redirect href="/paywall" />;
   }
 
   return (

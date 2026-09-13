@@ -131,6 +131,8 @@ def _upsert_goal_for_category(
     scope: str,
     partnership,
     template_slug: str,
+    accepted: bool = True,
+    proposed_by=None,
 ) -> tuple[Goal, bool]:
     goal, created = Goal.objects.update_or_create(
         user=user,
@@ -147,6 +149,24 @@ def _upsert_goal_for_category(
             "template_slug": template_slug,
         },
     )
+    if created:
+        updates = []
+        if scope == Goal.SCOPE_SHARED:
+            goal.accepted = accepted
+            updates.append("accepted")
+            if proposed_by is not None:
+                goal.proposed_by = proposed_by
+                updates.append("proposed_by")
+        if updates:
+            updates.append("updated_at")
+            goal.save(update_fields=updates)
+    elif (
+        scope == Goal.SCOPE_SHARED
+        and proposed_by is not None
+        and goal.proposed_by_id is None
+    ):
+        goal.proposed_by = proposed_by
+        goal.save(update_fields=["proposed_by", "updated_at"])
     return goal, created
 
 
@@ -169,6 +189,8 @@ def mirror_shared_goal(source_goal: Goal) -> None:
             scope=Goal.SCOPE_SHARED,
             partnership=source_goal.partnership,
             template_slug=source_goal.template_slug,
+            accepted=False,
+            proposed_by=source_goal.proposed_by or source_goal.user,
         )
 
 
@@ -180,9 +202,10 @@ def copy_shared_goals_to_user(partnership, user) -> int:
             partnership=partnership,
             scope=Goal.SCOPE_SHARED,
             is_active=True,
+            accepted=True,
         )
         .exclude(user=user)
-        .select_related("category", "category__group")
+        .select_related("category", "category__group", "proposed_by")
     )
     seen: set[tuple] = set()
     for goal in sources:
@@ -202,6 +225,8 @@ def copy_shared_goals_to_user(partnership, user) -> int:
             scope=Goal.SCOPE_SHARED,
             partnership=partnership,
             template_slug=goal.template_slug,
+            accepted=False,
+            proposed_by=goal.proposed_by or goal.user,
         )
         if created:
             copied += 1
@@ -246,6 +271,8 @@ def apply_goal_templates(user, template_selections: list[dict], partnership=None
             scope=scope,
             partnership=partnership,
             template_slug=template.slug,
+            accepted=True,
+            proposed_by=user if scope == Goal.SCOPE_SHARED else None,
         )
         if goal_created:
             created_goals.append(goal)
@@ -263,10 +290,131 @@ def apply_goal_templates(user, template_selections: list[dict], partnership=None
 
 def inherited_shared_template_slugs(user) -> list[str]:
     return list(
-        Goal.objects.filter(user=user, is_active=True, scope=Goal.SCOPE_SHARED)
+        Goal.objects.filter(
+            user=user,
+            is_active=True,
+            scope=Goal.SCOPE_SHARED,
+            accepted=True,
+        )
         .exclude(template_slug="")
         .values_list("template_slug", flat=True)
     )
+
+
+def _onboarding_group_for_goal(goal: Goal) -> str:
+    if goal.template_slug:
+        template = GoalTemplate.objects.filter(slug=goal.template_slug).first()
+        if template:
+            return template.group
+    category = goal.category
+    if category.group_id and category.group and category.group.key == CategoryGroup.KEY_DAILY_SPEND:
+        return GoalTemplate.GROUP_FINANCE
+    if category.type == TrackingCategory.FITNESS:
+        return GoalTemplate.GROUP_FITNESS
+    if category.type in (
+        TrackingCategory.FINANCE_EXPENSE,
+        TrackingCategory.FINANCE_INCOME,
+    ):
+        return GoalTemplate.GROUP_FINANCE
+    return GoalTemplate.GROUP_HABIT
+
+
+def _target_label(goal: Goal) -> str:
+    category = goal.category
+    target = goal.target_value
+    period = {
+        Goal.PERIOD_DAILY: "day",
+        Goal.PERIOD_WEEKLY: "week",
+        Goal.PERIOD_MONTHLY: "month",
+    }.get(goal.period, goal.period)
+    if category.metric_kind == TrackingCategory.METRIC_AMOUNT or category.type in (
+        TrackingCategory.FINANCE_EXPENSE,
+        TrackingCategory.FINANCE_INCOME,
+    ):
+        amount = f"${target:.0f}" if target == target.to_integral_value() else f"${target}"
+        return f"{amount} / {period}"
+    unit = (category.unit or "").strip()
+    qty = f"{target:.0f}" if target == target.to_integral_value() else f"{target}"
+    if unit:
+        return f"{qty} {unit} / {period}"
+    return f"{qty} / {period}"
+
+
+def serialize_together_goal(goal: Goal) -> dict:
+    category = goal.category
+    proposer = goal.proposed_by or None
+    return {
+        "uuid": str(goal.uuid),
+        "name": goal.display_name,
+        "category_name": category.name,
+        "category_emoji": (category.emoji or "").strip(),
+        "category_icon": category.icon or "",
+        "category_type": category.type,
+        "category_unit": category.unit or "",
+        "group": _onboarding_group_for_goal(goal),
+        "period": goal.period,
+        "direction": goal.direction,
+        "target_value": str(goal.target_value),
+        "target_label": _target_label(goal),
+        "template_slug": goal.template_slug,
+        "proposed_by_username": proposer.username if proposer else "",
+        "accepted": bool(goal.accepted),
+    }
+
+
+def together_goals_for_onboarding(user) -> list[dict]:
+    """Together goals the user should review — pending copies plus partner's existing ones."""
+    from accounts.partnerships import get_user_partnership
+
+    partnership = get_user_partnership(user)
+    if partnership is None:
+        return []
+    own = list(
+        Goal.objects.filter(
+            user=user,
+            partnership=partnership,
+            scope=Goal.SCOPE_SHARED,
+            is_active=True,
+        ).select_related("category", "category__group", "proposed_by")
+    )
+    if own:
+        return [serialize_together_goal(goal) for goal in own]
+
+    partner_member = (
+        partnership.members.exclude(user=user).select_related("user").first()
+    )
+    if partner_member is None:
+        return []
+    sources = (
+        Goal.objects.filter(
+            user=partner_member.user,
+            partnership=partnership,
+            scope=Goal.SCOPE_SHARED,
+            is_active=True,
+            accepted=True,
+        ).select_related("category", "category__group", "proposed_by")
+    )
+    return [serialize_together_goal(goal) for goal in sources]
+
+
+def resolve_together_approvals(user, approve_uuids: list) -> None:
+    """Accept selected Together goals; drop the rest of this user's pending copies."""
+    wanted = {str(item) for item in approve_uuids}
+    pending = list(
+        Goal.objects.filter(
+            user=user,
+            is_active=True,
+            scope=Goal.SCOPE_SHARED,
+            accepted=False,
+        )
+    )
+    for goal in pending:
+        if str(goal.uuid) in wanted:
+            goal.accepted = True
+            goal.save(update_fields=["accepted", "updated_at"])
+        else:
+            goal.is_active = False
+            goal.save(update_fields=["is_active", "updated_at"])
 
 
 def get_onboarding_status(user) -> dict:
@@ -277,7 +425,11 @@ def get_onboarding_status(user) -> dict:
         profile and profile.onboarding_completed_at is not None
     )
     active_templates = GoalTemplate.objects.filter(is_active=True).count()
-    active_goals = Goal.objects.filter(user=user, is_active=True).count()
+    active_goals = (
+        Goal.objects.filter(user=user, is_active=True)
+        .exclude(scope=Goal.SCOPE_SHARED, accepted=False)
+        .count()
+    )
     if not onboarding_completed and active_goals > 0:
         onboarding_completed = True
     partnership = get_user_partnership(user)
@@ -292,6 +444,7 @@ def get_onboarding_status(user) -> dict:
         "active_goal_count": active_goals,
         "available_template_count": active_templates,
         "inherited_shared_templates": inherited_shared_template_slugs(user),
+        "together_goals": together_goals_for_onboarding(user),
         "partnership": serialize_partnership(partnership),
     }
 
@@ -305,7 +458,14 @@ def complete_onboarding(user) -> None:
     profile.save(update_fields=["onboarding_completed_at", "updated_at"])
 
 
-def setup_onboarding(user, *, mode: str, templates: list[dict], invite_email: str = "") -> dict:
+def setup_onboarding(
+    user,
+    *,
+    mode: str,
+    templates: list[dict],
+    invite_email: str = "",
+    approve_together: list | None = None,
+) -> dict:
     from accounts.partnerships import (
         ensure_partnership,
         send_partner_invite,
@@ -341,6 +501,16 @@ def setup_onboarding(user, *, mode: str, templates: list[dict], invite_email: st
     else:
         for selection in templates:
             selection["scope"] = Goal.SCOPE_PERSONAL
+
+    if approve_together is not None:
+        resolve_together_approvals(user, approve_together)
+
+    accepted_slugs = set(inherited_shared_template_slugs(user))
+    templates = [
+        selection
+        for selection in templates
+        if selection.get("slug") not in accepted_slugs
+    ]
 
     result = apply_goal_templates(user, templates, partnership=partnership)
     complete_onboarding(user)

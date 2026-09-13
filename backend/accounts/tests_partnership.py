@@ -6,13 +6,22 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from accounts.models import PartnershipMember, User, UserProfile
-from accounts.partnerships import ensure_partnership
+from accounts.models import Partnership, PartnershipMember, User, UserProfile
+from accounts.partnerships import accept_invite_code, ensure_partnership
 from categories.defaults import create_default_categories_for_user
 from categories.models import TrackingCategory
 from entries.models import Entry
 from goals.models import Goal
 from goals.template_catalog import seed_goal_templates
+
+
+def accept_pending_together(user):
+    Goal.objects.filter(
+        user=user,
+        is_active=True,
+        scope=Goal.SCOPE_SHARED,
+        accepted=False,
+    ).update(accepted=True)
 
 
 class PartnershipInviteTests(TestCase):
@@ -79,6 +88,262 @@ class PartnershipInviteTests(TestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, 400)
+
+    def test_logged_in_user_joins_with_invite_code(self):
+        partnership = ensure_partnership(self.owner)
+        partner = User.objects.create_user(
+            username="joiner",
+            email="joiner@example.com",
+            password="testpass123",
+        )
+        create_default_categories_for_user(partner)
+        partner_client = APIClient()
+        partner_client.force_authenticate(user=partner)
+        resp = partner_client.post(
+            "/api/v1/partnership/join/",
+            {"invite_code": partnership.invite_code},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()["partnership"]
+        self.assertTrue(data["is_full"])
+        self.assertEqual(len(data["members"]), 2)
+        partner.refresh_from_db()
+        self.assertEqual(partner.partnership_membership.partnership_id, partnership.id)
+        self.assertEqual(partner.profile.tracking_mode, UserProfile.MODE_COUPLE)
+
+    def test_join_abandons_empty_own_partnership(self):
+        owner_space = ensure_partnership(self.owner)
+        partner = User.objects.create_user(
+            username="switcher",
+            email="switcher@example.com",
+            password="testpass123",
+        )
+        create_default_categories_for_user(partner)
+        leftover = ensure_partnership(partner)
+        leftover_id = leftover.id
+        partner_client = APIClient()
+        partner_client.force_authenticate(user=partner)
+        resp = partner_client.post(
+            "/api/v1/partnership/join/",
+            {"invite_code": owner_space.invite_code},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        partner.refresh_from_db()
+        self.assertEqual(partner.partnership_membership.partnership_id, owner_space.id)
+        self.assertFalse(
+            PartnershipMember.objects.filter(partnership_id=leftover_id).exists()
+        )
+        self.assertFalse(Partnership.objects.filter(id=leftover_id).exists())
+
+    def test_join_normalizes_dashed_lowercase_code(self):
+        partnership = ensure_partnership(self.owner)
+        partner = User.objects.create_user(
+            username="spaced",
+            email="spaced@example.com",
+            password="testpass123",
+        )
+        create_default_categories_for_user(partner)
+        partner_client = APIClient()
+        partner_client.force_authenticate(user=partner)
+        spaced = f"{partnership.invite_code[:3]}-{partnership.invite_code[3:]}".lower()
+        resp = partner_client.post(
+            "/api/v1/partnership/join/",
+            {"invite_code": spaced},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertTrue(resp.json()["partnership"]["is_full"])
+
+    def test_join_invalid_code_rejected(self):
+        partner = User.objects.create_user(
+            username="badcode",
+            email="badcode@example.com",
+            password="testpass123",
+        )
+        create_default_categories_for_user(partner)
+        partner_client = APIClient()
+        partner_client.force_authenticate(user=partner)
+        resp = partner_client.post(
+            "/api/v1/partnership/join/",
+            {"invite_code": "ZZZZZZ"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_join_rejected_when_already_paired(self):
+        first = ensure_partnership(self.owner)
+        partner = User.objects.create_user(
+            username="taken",
+            email="taken@example.com",
+            password="testpass123",
+        )
+        create_default_categories_for_user(partner)
+        accept_invite_code(partner, first.invite_code)
+        other_owner = User.objects.create_user(
+            username="otherowner",
+            email="otherowner@example.com",
+            password="testpass123",
+        )
+        other_space = ensure_partnership(other_owner)
+        partner_client = APIClient()
+        partner_client.force_authenticate(user=partner)
+        resp = partner_client.post(
+            "/api/v1/partnership/join/",
+            {"invite_code": other_space.invite_code},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("already connected", str(resp.json()))
+
+
+class PartnershipLeaveTests(TestCase):
+    def setUp(self):
+        seed_goal_templates()
+        self.client = APIClient()
+        self.owner = User.objects.create_user(
+            username="owner",
+            email="owner@example.com",
+            password="testpass123",
+        )
+        self.partner = User.objects.create_user(
+            username="sam",
+            email="sam@example.com",
+            password="testpass123",
+        )
+        create_default_categories_for_user(self.owner)
+        create_default_categories_for_user(self.partner)
+        self.client.force_authenticate(user=self.owner)
+
+    def _link(self, accept_together=True):
+        setup = self.client.post(
+            "/api/v1/onboarding/setup/",
+            {
+                "mode": "couple",
+                "templates": [{"slug": "groceries-monthly-max", "scope": "shared"}],
+            },
+            format="json",
+        )
+        self.assertEqual(setup.status_code, 200, setup.content)
+        code = setup.json()["partnership"]["invite_code"]
+        partner_client = APIClient()
+        partner_client.force_authenticate(user=self.partner)
+        join = partner_client.post(
+            "/api/v1/partnership/join/",
+            {"invite_code": code},
+            format="json",
+        )
+        self.assertEqual(join.status_code, 200, join.content)
+        if accept_together:
+            accept_pending_together(self.partner)
+        return partner_client, code
+
+    def test_leave_unlinks_caller_and_keeps_partner_waiting(self):
+        partner_client, old_code = self._link()
+        partnership_id = self.owner.partnership_membership.partnership_id
+
+        resp = self.client.post("/api/v1/partnership/leave/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertIsNone(resp.json()["partnership"])
+
+        self.owner.refresh_from_db()
+        self.partner.refresh_from_db()
+        self.owner.profile.refresh_from_db()
+        self.partner.profile.refresh_from_db()
+        self.assertFalse(PartnershipMember.objects.filter(user=self.owner).exists())
+        self.assertEqual(self.owner.profile.tracking_mode, UserProfile.MODE_SOLO)
+
+        remaining = Partnership.objects.get(id=partnership_id)
+        self.assertEqual(remaining.members.count(), 1)
+        self.assertEqual(remaining.members.get().user_id, self.partner.id)
+        self.assertEqual(remaining.members.get().role, PartnershipMember.ROLE_OWNER)
+        self.assertNotEqual(remaining.invite_code, old_code)
+        self.assertEqual(self.partner.profile.tracking_mode, UserProfile.MODE_COUPLE)
+
+        rejoin = self.client.post(
+            "/api/v1/partnership/join/",
+            {"invite_code": old_code},
+            format="json",
+        )
+        self.assertEqual(rejoin.status_code, 400)
+
+        waiting = partner_client.get("/api/v1/partnership/")
+        self.assertEqual(waiting.status_code, 200)
+        data = waiting.json()["partnership"]
+        self.assertFalse(data["is_full"])
+        self.assertEqual(len(data["members"]), 1)
+
+    def test_leave_turns_together_goals_personal(self):
+        self._link()
+        resp = self.client.post("/api/v1/partnership/leave/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+        owner_goal = Goal.objects.get(
+            user=self.owner, category__name="Groceries", is_active=True
+        )
+        partner_goal = Goal.objects.get(
+            user=self.partner, category__name="Groceries", is_active=True
+        )
+        self.assertEqual(owner_goal.scope, Goal.SCOPE_PERSONAL)
+        self.assertIsNone(owner_goal.partnership_id)
+        self.assertEqual(partner_goal.scope, Goal.SCOPE_PERSONAL)
+        self.assertIsNone(partner_goal.partnership_id)
+
+    def test_leave_deactivates_unaccepted_together_copies(self):
+        self._link(accept_together=False)
+        pending = Goal.objects.get(
+            user=self.partner,
+            category__name="Groceries",
+            scope=Goal.SCOPE_SHARED,
+            is_active=True,
+        )
+        self.assertFalse(pending.accepted)
+
+        resp = self.client.post("/api/v1/partnership/leave/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+        pending.refresh_from_db()
+        self.assertFalse(pending.is_active)
+        self.assertIsNone(pending.partnership_id)
+
+        owner_goal = Goal.objects.get(
+            user=self.owner, category__name="Groceries", is_active=True
+        )
+        self.assertEqual(owner_goal.scope, Goal.SCOPE_PERSONAL)
+
+    def test_leave_unpaired_couple_space(self):
+        ensure_partnership(self.owner)
+        resp = self.client.post("/api/v1/partnership/leave/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertIsNone(resp.json()["partnership"])
+        self.assertFalse(PartnershipMember.objects.filter(user=self.owner).exists())
+        self.assertFalse(Partnership.objects.filter(members__user=self.owner).exists())
+        self.owner.profile.refresh_from_db()
+        self.assertEqual(self.owner.profile.tracking_mode, UserProfile.MODE_SOLO)
+
+    def test_leave_without_partnership_rejected(self):
+        resp = self.client.post("/api/v1/partnership/leave/")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_leave_allows_joining_a_new_partner(self):
+        self._link()
+        self.client.post("/api/v1/partnership/leave/")
+
+        other = User.objects.create_user(
+            username="other",
+            email="other@example.com",
+            password="testpass123",
+        )
+        create_default_categories_for_user(other)
+        other_space = ensure_partnership(other)
+        join = self.client.post(
+            "/api/v1/partnership/join/",
+            {"invite_code": other_space.invite_code},
+            format="json",
+        )
+        self.assertEqual(join.status_code, 200, join.content)
+        self.assertTrue(join.json()["partnership"]["is_full"])
 
 
 class CoupleOnboardingTests(TestCase):
@@ -212,14 +477,31 @@ class CoupleOnboardingTests(TestCase):
             format="json",
         )
         self.assertEqual(join.status_code, 200, join.content)
-        self.assertTrue(
-            Goal.objects.filter(
-                user=partner,
-                category__name="Groceries",
-                scope=Goal.SCOPE_SHARED,
-                is_active=True,
-            ).exists()
+        pending = Goal.objects.get(
+            user=partner,
+            category__name="Groceries",
+            scope=Goal.SCOPE_SHARED,
+            is_active=True,
         )
+        self.assertFalse(pending.accepted)
+        status = partner_client.get("/api/v1/onboarding/status/")
+        self.assertEqual(status.status_code, 200)
+        together = status.json()["together_goals"]
+        self.assertEqual(len(together), 1)
+        self.assertEqual(together[0]["category_name"], "Groceries")
+        self.assertFalse(together[0]["accepted"])
+        setup_partner = partner_client.post(
+            "/api/v1/onboarding/setup/",
+            {
+                "mode": "couple",
+                "templates": [],
+                "approve_together": [together[0]["uuid"]],
+            },
+            format="json",
+        )
+        self.assertEqual(setup_partner.status_code, 200, setup_partner.content)
+        pending.refresh_from_db()
+        self.assertTrue(pending.accepted)
 
 
 class SharedGoalProgressTests(TestCase):
@@ -249,6 +531,7 @@ class SharedGoalProgressTests(TestCase):
         partner_client = APIClient()
         partner_client.force_authenticate(user=self.b)
         partner_client.post("/api/v1/partnership/join/", {"invite_code": code}, format="json")
+        accept_pending_together(self.b)
 
         cat_a = TrackingCategory.objects.get(user=self.a, name="Groceries")
         cat_b = TrackingCategory.objects.get(user=self.b, name="Groceries")
@@ -280,6 +563,7 @@ class SharedGoalProgressTests(TestCase):
         partner_client = APIClient()
         partner_client.force_authenticate(user=self.b)
         partner_client.post("/api/v1/partnership/join/", {"invite_code": code}, format="json")
+        accept_pending_together(self.b)
 
         cat_a = TrackingCategory.objects.get(user=self.a, name="Groceries")
         cat_b = TrackingCategory.objects.get(user=self.b, name="Groceries")
@@ -316,6 +600,7 @@ class SharedGoalProgressTests(TestCase):
             format="json",
         )
         self.assertEqual(join.status_code, 200, join.content)
+        accept_pending_together(self.b)
         return partner_client
 
     def test_shared_workout_dedupes_when_both_with_partner(self):

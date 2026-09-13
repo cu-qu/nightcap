@@ -22,3 +22,6 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:50527",
 ]
 CORS_ALLOW_ALL_ORIGINS = os.environ.get("CORS_ALLOW_ALL_ORIGINS", "false").lower() in ("true", "1", "yes")
+
+IAP_APPLE_VERIFY_SIGNATURE = False
+IAP_STAFF_COMPLIMENTARY = True

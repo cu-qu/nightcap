@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
+  Alert,
   Linking,
   Platform,
   Pressable,
@@ -13,14 +14,24 @@ import {
   View,
 } from "react-native";
 
-import { getApiBaseUrl } from "@/src/api/client";
-import { ensurePartnership, invitePartner } from "@/src/api/partnership";
+import {
+  ensurePartnership,
+  invitePartner,
+  joinPartnership,
+  leavePartnership,
+  normalizeInviteCode,
+  formatInviteCodeInput,
+} from "@/src/api/partnership";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { ReminderTimePicker } from "@/src/components/ReminderTimePicker";
+import { LEGAL_URLS } from "@/src/iap/products";
+import { useCoupleIap } from "@/src/iap/useCoupleIap";
 import { formatReminderTime, remindersSupported } from "@/src/notifications/reminders";
 import { useAuthStore } from "@/src/store/authStore";
 import { useReminderStore } from "@/src/store/reminderStore";
 import { colors } from "@/src/theme/colors";
+import { confirmDeleteAccount } from "@/src/utils/deleteAccountPrompt";
+import { membershipSummary } from "@/src/utils/needsPaywall";
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -31,6 +42,7 @@ export default function SettingsScreen() {
   const other = partnership?.members.find((m) => m.username !== user?.username);
 
   const [email, setEmail] = useState("");
+  const [partnerCode, setPartnerCode] = useState("");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [reminderBusy, setReminderBusy] = useState(false);
@@ -42,6 +54,13 @@ export default function SettingsScreen() {
   const enableReminders = useReminderStore((s) => s.enable);
   const disableReminders = useReminderStore((s) => s.disable);
   const setReminderTime = useReminderStore((s) => s.setTime);
+  const storeActive =
+    user?.membership?.status === "active" ||
+    user?.membership?.source === "store";
+  const iap = useCoupleIap({
+    user,
+    onEntitled: () => refreshUser(),
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -107,6 +126,30 @@ export default function SettingsScreen() {
     }
   }
 
+  async function onJoinCode() {
+    const code = normalizeInviteCode(partnerCode);
+    if (!code) return;
+    if (partnership?.invite_code && code === normalizeInviteCode(partnership.invite_code)) {
+      setInviteMessage("That's your code — ask your partner for theirs.");
+      return;
+    }
+    setInviteBusy(true);
+    setInviteMessage(null);
+    try {
+      const { partnership: joined } = await joinPartnership(code);
+      await refreshUser();
+      const linked = joined.members.find((m) => m.username !== user?.username);
+      setPartnerCode("");
+      setInviteMessage(
+        linked ? `Linked with ${linked.username}` : "You're linked with your partner."
+      );
+    } catch (e) {
+      setInviteMessage(e instanceof Error ? e.message : "Could not link with that code");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
   async function onShareCode() {
     const code = partnership?.invite_code;
     if (!code) return;
@@ -119,12 +162,47 @@ export default function SettingsScreen() {
     }
   }
 
+  function onLeavePartnership() {
+    const linkedName = other?.username;
+    Alert.alert(
+      linkedName ? "Unlink partner?" : "Use NightCap alone?",
+      linkedName
+        ? `You'll no longer share progress with ${linkedName}. Together goals become personal for both of you.`
+        : "Your invite code will stop working. You can invite someone later.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: linkedName ? "Unlink" : "Use NightCap alone",
+          style: "destructive",
+          onPress: () => void confirmLeavePartnership(!!linkedName),
+        },
+      ]
+    );
+  }
+
+  async function confirmLeavePartnership(wasLinked: boolean) {
+    setInviteBusy(true);
+    setInviteMessage(null);
+    try {
+      await leavePartnership();
+      await refreshUser();
+      setInviteMessage(
+        wasLinked
+          ? "Unlinked. Together goals are now just yours."
+          : "You're using NightCap alone."
+      );
+    } catch (e) {
+      setInviteMessage(e instanceof Error ? e.message : "Could not unlink");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.muted}>Signed in as</Text>
         <Text style={styles.username}>{user?.username ?? "—"}</Text>
-        <Text style={styles.api}>API: {getApiBaseUrl()}</Text>
 
         <View style={styles.reminderCard}>
           <View style={styles.reminderHeader}>
@@ -168,6 +246,37 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.partnerCard}>
+          <Text style={styles.partnerEyebrow}>Membership</Text>
+          <Text style={styles.partnerName}>
+            {user?.membership?.status === "active"
+              ? "NightCap for two"
+              : user?.membership?.status === "complimentary"
+                ? "Complimentary"
+                : user?.membership?.status === "trial"
+                  ? "Free month"
+                  : "Subscribe"}
+          </Text>
+          <Text style={styles.partnerSub}>{membershipSummary(user)}</Text>
+          <PrimaryButton
+            title={
+              user?.membership?.status === "active" ||
+              user?.membership?.status === "complimentary"
+                ? "See plans / Restore"
+                : "See plans"
+            }
+            variant="secondary"
+            onPress={() => router.push("/paywall")}
+          />
+          {storeActive ? (
+            <PrimaryButton
+              title="Manage subscription"
+              variant="ghost"
+              onPress={() => void iap.manage()}
+            />
+          ) : null}
+        </View>
+
+        <View style={styles.partnerCard}>
           <Text style={styles.partnerEyebrow}>Your person</Text>
           {other ? (
             <>
@@ -175,18 +284,42 @@ export default function SettingsScreen() {
               <Text style={styles.partnerSub}>
                 Shared goals count both of you. Personal goals stay private.
               </Text>
+              <PrimaryButton
+                title="Unlink partner"
+                variant="secondary"
+                onPress={onLeavePartnership}
+                loading={inviteBusy}
+              />
             </>
           ) : partnership ? (
             <>
               <Text style={styles.partnerName}>Waiting on a partner</Text>
               <Text style={styles.code}>{partnership.invite_code}</Text>
               <Text style={styles.partnerSub}>
-                Share this code. They enter it when they create an account.
+                Share this code, or enter theirs if they already have NightCap.
               </Text>
               <PrimaryButton
                 title="Share invite code"
                 variant="secondary"
                 onPress={() => void onShareCode()}
+              />
+              <Text style={styles.emailLabel}>Their invite code</Text>
+              <TextInput
+                autoCapitalize="characters"
+                autoCorrect={false}
+                autoComplete="off"
+                value={partnerCode}
+                onChangeText={(value) => setPartnerCode(formatInviteCodeInput(value))}
+                placeholder="ABC123"
+                placeholderTextColor={colors.muted}
+                maxLength={8}
+                style={styles.input}
+              />
+              <PrimaryButton
+                title="Link with partner"
+                onPress={() => void onJoinCode()}
+                loading={inviteBusy}
+                disabled={normalizeInviteCode(partnerCode).length < 6}
               />
               <Text style={styles.emailLabel}>Email invite</Text>
               <TextInput
@@ -204,16 +337,42 @@ export default function SettingsScreen() {
                 loading={inviteBusy}
                 disabled={!email.trim()}
               />
+              <Pressable
+                onPress={onLeavePartnership}
+                disabled={inviteBusy}
+                hitSlop={6}
+              >
+                <Text style={styles.unlinkText}>Use NightCap alone</Text>
+              </Pressable>
             </>
           ) : (
             <>
               <Text style={styles.partnerName}>Using NightCap alone</Text>
               <Text style={styles.partnerSub}>
-                Invite a partner to share grocery budgets, date nights, and couple
-                habits — personal goals stay just yours.
+                Enter their code if they already have a couple space, or create
+                yours to invite them. Personal goals stay just yours.
               </Text>
+              <Text style={styles.emailLabel}>Their invite code</Text>
+              <TextInput
+                autoCapitalize="characters"
+                autoCorrect={false}
+                autoComplete="off"
+                value={partnerCode}
+                onChangeText={(value) => setPartnerCode(formatInviteCodeInput(value))}
+                placeholder="ABC123"
+                placeholderTextColor={colors.muted}
+                maxLength={8}
+                style={styles.input}
+              />
+              <PrimaryButton
+                title="Link with partner"
+                onPress={() => void onJoinCode()}
+                loading={inviteBusy}
+                disabled={normalizeInviteCode(partnerCode).length < 6}
+              />
               <PrimaryButton
                 title="Invite a partner"
+                variant="secondary"
                 onPress={() => void onCreateCouple()}
                 loading={inviteBusy}
               />
@@ -223,6 +382,20 @@ export default function SettingsScreen() {
             <Text style={styles.inviteMessage}>{inviteMessage}</Text>
           ) : null}
         </View>
+
+        <Pressable
+          style={styles.linkRow}
+          onPress={() => router.push("/recap/archive")}
+          hitSlop={6}
+        >
+          <View style={styles.flex}>
+            <Text style={styles.linkTitle}>Recaps</Text>
+            <Text style={styles.linkSub}>
+              Past months and years — photos, moments, and check-ins
+            </Text>
+          </View>
+          <Text style={styles.linkChevron}>›</Text>
+        </Pressable>
 
         <Pressable
           style={styles.linkRow}
@@ -247,12 +420,54 @@ export default function SettingsScreen() {
           <Text style={styles.linkChevron}>›</Text>
         </Pressable>
 
+        <Pressable
+          style={styles.linkRow}
+          onPress={() => void Linking.openURL(LEGAL_URLS.privacy)}
+          hitSlop={6}
+        >
+          <View style={styles.flex}>
+            <Text style={styles.linkTitle}>Privacy</Text>
+            <Text style={styles.linkSub}>How NightCap uses your data</Text>
+          </View>
+          <Text style={styles.linkChevron}>›</Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.linkRow}
+          onPress={() => void Linking.openURL(LEGAL_URLS.terms)}
+          hitSlop={6}
+        >
+          <View style={styles.flex}>
+            <Text style={styles.linkTitle}>Terms</Text>
+            <Text style={styles.linkSub}>Terms of service</Text>
+          </View>
+          <Text style={styles.linkChevron}>›</Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.linkRow}
+          onPress={() => void Linking.openURL(LEGAL_URLS.support)}
+          hitSlop={6}
+        >
+          <View style={styles.flex}>
+            <Text style={styles.linkTitle}>Support</Text>
+            <Text style={styles.linkSub}>Help and contact</Text>
+          </View>
+          <Text style={styles.linkChevron}>›</Text>
+        </Pressable>
+
         <View style={styles.signOut}>
           <PrimaryButton
             title="Sign out"
             variant="secondary"
             onPress={() => void logout()}
           />
+          <Pressable
+            onPress={() => confirmDeleteAccount(logout)}
+            hitSlop={8}
+          >
+            <Text style={styles.deleteAccount}>Delete account</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </Screen>
@@ -270,15 +485,10 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   username: {
-    marginBottom: 8,
+    marginBottom: 20,
     fontSize: 20,
     fontWeight: "600",
     color: colors.text,
-  },
-  api: {
-    marginBottom: 20,
-    fontSize: 12,
-    color: colors.muted,
   },
   partnerCard: {
     marginBottom: 16,
@@ -352,6 +562,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.accentSoft,
   },
+  unlinkText: {
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.danger,
+    textAlign: "center",
+  },
   linkRow: {
     marginBottom: 12,
     flexDirection: "row",
@@ -384,5 +601,12 @@ const styles = StyleSheet.create({
   },
   signOut: {
     marginTop: 40,
+    gap: 16,
+  },
+  deleteAccount: {
+    textAlign: "center",
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.danger,
   },
 });

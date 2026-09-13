@@ -2,6 +2,8 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+
+from core.permissions import HasActiveMembership
 from rest_framework.response import Response
 
 from .models import Goal
@@ -61,7 +63,7 @@ from .services import (
 )
 class GoalViewSet(viewsets.ModelViewSet):
     serializer_class = GoalSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
     queryset = Goal.objects.none()
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["created_at", "period", "target_value"]
@@ -94,6 +96,25 @@ class GoalViewSet(viewsets.ModelViewSet):
         goal.is_active = False
         goal.save(update_fields=["is_active", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        tags=["Goals"],
+        summary="Approve a Together goal",
+        description="The other person proposed this shared goal. Accept it to count both of you.",
+        request=None,
+        responses={200: GoalSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="accept")
+    def accept(self, request, pk=None):
+        goal = self.get_object()
+        if goal.scope != Goal.SCOPE_SHARED:
+            return Response(
+                {"detail": "Only Together goals can be approved."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        goal.accepted = True
+        goal.save(update_fields=["accepted", "updated_at"])
+        return Response(self.get_serializer(goal).data)
 
     @extend_schema(
         tags=["Goals"],

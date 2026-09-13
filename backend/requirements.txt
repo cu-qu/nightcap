@@ -10,4 +10,6 @@ drf-spectacular==0.29.0
 gunicorn==25.1.0
 Pillow==11.3.0
 psycopg[binary]==3.3.3
+PyJWT==2.10.1
+google-auth==2.41.1
 redis==5.3.1

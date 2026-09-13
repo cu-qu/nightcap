@@ -2,6 +2,8 @@ from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+
+from core.permissions import HasActiveMembership
 from rest_framework.response import Response
 
 from .models import CategoryGroup, TrackingCategory
@@ -34,7 +36,7 @@ from .serializers import (
 )
 class TrackingCategoryViewSet(viewsets.ModelViewSet):
     serializer_class = TrackingCategorySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
     queryset = TrackingCategory.objects.none()
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["name", "type"]
@@ -96,7 +98,7 @@ class TrackingCategoryViewSet(viewsets.ModelViewSet):
     destroy=extend_schema(tags=["CategoryGroups"], summary="Delete category group"),
 )
 class CategoryGroupViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasActiveMembership]
     queryset = CategoryGroup.objects.none()
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["sort_order", "name", "created_at"]

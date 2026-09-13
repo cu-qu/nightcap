@@ -10,3 +10,6 @@ def create_user_profile(sender, instance, created, **kwargs):
             user=instance,
             defaults={"preferred_language": instance.preferred_language},
         )
+        from accounts.memberships import ensure_user_membership
+
+        ensure_user_membership(instance)

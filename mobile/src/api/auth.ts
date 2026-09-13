@@ -28,3 +28,9 @@ export async function login(input: {
 export async function fetchMe(): Promise<User> {
   return apiRequest<User>("/api/v1/auth/me/");
 }
+
+export async function deleteAccount(): Promise<void> {
+  await apiRequest<unknown>("/api/v1/auth/account/", {
+    method: "DELETE",
+  });
+}

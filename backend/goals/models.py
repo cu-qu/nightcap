@@ -61,6 +61,18 @@ class Goal(models.Model):
         related_name="goals",
     )
     template_slug = models.SlugField(max_length=80, blank=True)
+    proposed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="proposed_goals",
+        help_text="Who first made this a Together goal.",
+    )
+    accepted = models.BooleanField(
+        default=True,
+        help_text="Together goals stay pending until the other person approves.",
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

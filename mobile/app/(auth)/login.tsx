@@ -72,8 +72,21 @@ export default function LoginScreen() {
             onChangeText={setPassword}
             placeholder="••••••••"
             placeholderTextColor={colors.muted}
-            style={[styles.input, styles.inputLast]}
+            style={styles.input}
           />
+
+          <Pressable
+            hitSlop={8}
+            onPress={() =>
+              router.push({
+                pathname: "/(auth)/forgot-password",
+                params: { username: username.trim() },
+              })
+            }
+            style={styles.forgot}
+          >
+            <Text style={styles.footerLink}>Forgot password?</Text>
+          </Pressable>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -134,8 +147,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
-  inputLast: {
+  forgot: {
+    alignSelf: "flex-end",
     marginBottom: 24,
+    marginTop: -4,
   },
   error: {
     marginBottom: 16,
