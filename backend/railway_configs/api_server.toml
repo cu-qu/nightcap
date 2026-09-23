@@ -1,8 +1,0 @@
-[build]
-builder = "railpack"
-buildCommand = "bash ./build.sh"
-
-[deploy]
-preDeployCommand = ["bash ./build.sh"]
-startCommand = "python -m gunicorn config.wsgi:application --bind 0.0.0.0:8000"
-restartPolicyType = "never"
