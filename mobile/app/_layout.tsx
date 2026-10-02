@@ -9,6 +9,7 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import "react-native-reanimated";
 
 import { flushOutbox } from "@/src/db/sync";
+import { registerPushTokenIfPossible } from "@/src/notifications/push";
 import {
   REMINDER_PATH,
   cancelNightlyReminder,
@@ -45,8 +46,10 @@ function useReminderObserver() {
     if (!remindersSupported()) return;
 
     function openFromNotification(notification: Notifications.Notification) {
-      const url = notification.request.content.data?.url;
-      if (typeof url !== "string" || url !== REMINDER_PATH) return;
+      const data = notification.request.content.data ?? {};
+      const url = data.url;
+      const isNudge = data.type === "partner_nudge";
+      if (typeof url !== "string" || (url !== REMINDER_PATH && !isNudge)) return;
       Notifications.clearLastNotificationResponse();
 
       const { isAuthenticated, user } = useAuthStore.getState();
@@ -62,7 +65,9 @@ function useReminderObserver() {
         router.push("/paywall");
         return;
       }
-      useRitualDraftStore.getState().beginForDate(todayIso());
+      const date =
+        typeof data.date === "string" && data.date ? data.date : todayIso();
+      useRitualDraftStore.getState().beginForDate(date);
       router.push(REMINDER_PATH);
     }
 
@@ -106,6 +111,8 @@ export default function RootLayout() {
   const hydrateDraft = useRitualDraftStore((s) => s.hydrate);
   const hydrateReminders = useReminderStore((s) => s.hydrate);
   const syncReminderSchedule = useReminderStore((s) => s.syncSchedule);
+  const user = useAuthStore((s) => s.user);
+  const partnered = (user?.partnership?.members?.length ?? 0) > 1;
 
   useReminderObserver();
 
@@ -140,9 +147,14 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!hydrated) return;
-    if (isAuthenticated) void syncReminderSchedule();
-    else void cancelNightlyReminder();
-  }, [hydrated, isAuthenticated, syncReminderSchedule]);
+    if (isAuthenticated) {
+      void syncReminderSchedule();
+      void registerPushTokenIfPossible({ prompt: partnered });
+      if (remindersSupported()) {
+        void Notifications.setBadgeCountAsync(0).catch(() => undefined);
+      }
+    } else void cancelNightlyReminder();
+  }, [hydrated, isAuthenticated, partnered, syncReminderSchedule]);
 
   if (!hydrated) {
     return (

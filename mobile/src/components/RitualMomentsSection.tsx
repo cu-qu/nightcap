@@ -1,7 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
 import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { nightCapPhotoUrl } from "@/src/api/nightcaps";
+import { nightCapPhotoUrl, resolveNightCapPhotoUri } from "@/src/api/nightcaps";
 import { AuthenticatedImage } from "@/src/components/AuthenticatedImage";
 import { colors } from "@/src/theme/colors";
 
@@ -13,6 +13,7 @@ type Props = {
   onChangeMoment: (value: string) => void;
   localPhotoUri: string;
   hasRemotePhoto: boolean;
+  remotePhotoUrl?: string | null;
   photoCacheKey: string;
   onPickedPhoto: (file: { uri: string; name: string; type: string }) => void;
   onClearPhoto: () => void;
@@ -47,6 +48,7 @@ export function RitualMomentsSection({
   onChangeMoment,
   localPhotoUri,
   hasRemotePhoto,
+  remotePhotoUrl,
   photoCacheKey,
   onPickedPhoto,
   onClearPhoto,
@@ -102,7 +104,12 @@ export function RitualMomentsSection({
     Alert.alert("Favorite photo", "Save a still from today.", buttons);
   }
 
-  const remoteUri = nightCapPhotoUrl(date, photoCacheKey);
+  const remoteUri = resolveNightCapPhotoUri({
+    date,
+    photoUrl: remotePhotoUrl,
+    cacheKey: photoCacheKey,
+  });
+  const fallbackUri = nightCapPhotoUrl(date, photoCacheKey);
 
   return (
     <View style={styles.section}>
@@ -120,6 +127,7 @@ export function RitualMomentsSection({
         ) : hasRemotePhoto ? (
           <AuthenticatedImage
             uri={remoteUri}
+            fallbackUri={fallbackUri}
             style={styles.photo}
             accessibilityLabel="Favorite photo of the day"
           />

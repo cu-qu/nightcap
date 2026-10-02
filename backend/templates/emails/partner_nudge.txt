@@ -1,0 +1,3 @@
+{{ from_username }} nudged you to NightCap for {{ day_label }}.
+
+Open NightCap and close out the day — spend, habits, and a good note.

@@ -24,7 +24,21 @@ class NightCapAdmin(admin.ModelAdmin):
         "favorite_moment",
         "mood",
     )
-    readonly_fields = ("uuid", "has_favorite_photo")
+    readonly_fields = ("uuid", "has_favorite_photo", "created_at", "updated_at")
+    fields = (
+        "user",
+        "date",
+        "mood",
+        "status",
+        "reflection",
+        "favorite_moment",
+        "favorite_photo",
+        "has_favorite_photo",
+        "completed_at",
+        "uuid",
+        "created_at",
+        "updated_at",
+    )
 
     @admin.display(boolean=True, description="Photo")
     def has_favorite_photo(self, obj):

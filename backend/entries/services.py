@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from categories.models import TrackingCategory
 
+from .media import nightcap_photo_url
 from .models import DayReflection, Entry, NightCap
 
 
@@ -133,6 +134,10 @@ def upsert_ritual(
         nightcap.completed_at = None
 
     nightcap.save()
+
+    from accounts.nudges import acknowledge_incoming_nudges
+
+    acknowledge_incoming_nudges(user, ritual_date)
 
     seen_category_ids: list[int] = []
     for item in items:
@@ -263,7 +268,7 @@ def _calendar_group_summaries(user, start: date, end: date) -> dict[date, list[d
     return result
 
 
-def calendar_month(user, year: int, month: int) -> dict:
+def calendar_month(user, year: int, month: int, request=None) -> dict:
     start = date(year, month, 1)
     end = date(year, month, monthrange(year, month)[1])
     entries = (
@@ -292,6 +297,43 @@ def calendar_month(user, year: int, month: int) -> dict:
         for row in NightCap.objects.filter(user=user, date__gte=start, date__lte=end)
     }
     groups_by_date = _calendar_group_summaries(user, start, end)
+    partner = _chart_partner(user)
+    partner_nightcaps = {}
+    partner_entry_dates: set = set()
+    outbound_nudges = {}
+    inbound_nudges = {}
+    if partner is not None:
+        from accounts.models import PartnerNudge
+
+        partner_nightcaps = {
+            row.date: row
+            for row in NightCap.objects.filter(
+                user=partner, date__gte=start, date__lte=end
+            )
+        }
+        partner_entry_dates = set(
+            Entry.objects.filter(
+                user=partner, date__gte=start, date__lte=end
+            ).values_list("date", flat=True)
+        )
+        outbound_nudges = {
+            row.date: row
+            for row in PartnerNudge.objects.filter(
+                from_user=user,
+                to_user=partner,
+                date__gte=start,
+                date__lte=end,
+            )
+        }
+        inbound_nudges = {
+            row.date: row
+            for row in PartnerNudge.objects.filter(
+                from_user=partner,
+                to_user=user,
+                date__gte=start,
+                date__lte=end,
+            )
+        }
 
     days = []
     cursor = start
@@ -301,6 +343,28 @@ def calendar_month(user, year: int, month: int) -> dict:
         nightcap = nightcaps.get(cursor)
         reflection = (nightcap.reflection if nightcap else "") or ""
         mood = (nightcap.mood if nightcap else "") or ""
+        self_logged = (
+            nightcap is not None or entry_count > 0 or bool(reflection)
+        )
+        partner_payload = None
+        if partner is not None:
+            partner_nightcap = partner_nightcaps.get(cursor)
+            partner_logged = (
+                partner_nightcap is not None or cursor in partner_entry_dates
+            )
+            outbound = outbound_nudges.get(cursor)
+            inbound = inbound_nudges.get(cursor)
+            partner_payload = {
+                "username": partner.username,
+                "has_nightcap": partner_logged,
+                "nightcap_status": (
+                    partner_nightcap.status if partner_nightcap else None
+                ),
+                "nudged_at": outbound.created_at if outbound else None,
+                "incoming_nudge_at": (
+                    inbound.created_at if inbound and not self_logged else None
+                ),
+            }
         days.append(
             {
                 "date": cursor,
@@ -310,6 +374,9 @@ def calendar_month(user, year: int, month: int) -> dict:
                 "nightcap_status": nightcap.status if nightcap else None,
                 "mood": mood,
                 "has_favorite_photo": bool(nightcap.favorite_photo) if nightcap else False,
+                "favorite_photo_url": (
+                    nightcap_photo_url(nightcap, request) if nightcap else None
+                ),
                 "favorite_moment": (
                     (nightcap.favorite_moment if nightcap else "") or ""
                 ),
@@ -317,6 +384,7 @@ def calendar_month(user, year: int, month: int) -> dict:
                 "expense_total": (row["expense_total"] if row else None) or Decimal("0"),
                 "habit_count": row["habit_count"] if row else 0,
                 "groups": groups_by_date.get(cursor, []),
+                "partner": partner_payload,
             }
         )
         cursor += timedelta(days=1)
@@ -376,13 +444,9 @@ def _shared_category_ids(user) -> set[int]:
 
 
 def _chart_partner(user):
-    from accounts.partnerships import get_user_partnership
+    from accounts.partnerships import get_partner_user
 
-    partnership = get_user_partnership(user)
-    if partnership is None:
-        return None
-    member = partnership.members.exclude(user=user).select_related("user").first()
-    return member.user if member else None
+    return get_partner_user(user)
 
 
 def _entry_together_slice(

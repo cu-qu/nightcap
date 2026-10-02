@@ -1,6 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
 
+import { registerPushTokenIfPossible } from "@/src/notifications/push";
 import {
   DEFAULT_REMINDER_HOUR,
   DEFAULT_REMINDER_MINUTE,
@@ -134,6 +135,7 @@ export const useReminderStore = create<ReminderState>((set, get) => ({
     const prefs = { ...next, enabled: ok };
     set(prefs);
     await writePrefs(prefs);
+    if (ok) void registerPushTokenIfPossible();
     return ok;
   },
 

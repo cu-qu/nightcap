@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import { fetchCalendar } from "@/src/api/calendar";
+import { nudgePartner, nudgeSentMessage } from "@/src/api/partnership";
 import { fetchRecapIndex } from "@/src/api/recaps";
 import { GoalsSnapshot } from "@/src/components/GoalsSnapshot";
 import { MoonRiseTransition } from "@/src/components/MoonRiseTransition";
@@ -19,7 +20,8 @@ import { useAuthStore } from "@/src/store/authStore";
 import { useGoalsStore } from "@/src/store/goalsStore";
 import { useRitualDraftStore } from "@/src/store/ritualDraftStore";
 import { colors } from "@/src/theme/colors";
-import type { RecapIndexResponse } from "@/src/types/api";
+import type { CalendarDay, RecapIndexResponse } from "@/src/types/api";
+import { dayHasNightCap } from "@/src/utils/calendarStats";
 import {
   formatFullDisplayDate,
   todayIso,
@@ -34,11 +36,18 @@ export default function HomeScreen() {
   const today = todayIso();
   const [recaps, setRecaps] = useState<RecapIndexResponse | null>(null);
 
-  const [hasTodayNightCap, setHasTodayNightCap] = useState(false);
+  const [todayRow, setTodayRow] = useState<CalendarDay | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [moonVisible, setMoonVisible] = useState(false);
+  const [nudging, setNudging] = useState(false);
+  const [nudgeMessage, setNudgeMessage] = useState<string | null>(null);
   const didNavigate = useRef(false);
+  const hasTodayNightCap = dayHasNightCap(todayRow);
+  const partner = todayRow?.partner ?? null;
+  const incomingNudge = !!partner?.incoming_nudge_at && !hasTodayNightCap;
+  const canNudgePartner =
+    !!partner && !partner.has_nightcap && !partner.nudged_at;
 
   const loadHome = useCallback(async () => {
     const now = new Date();
@@ -57,23 +66,11 @@ export default function HomeScreen() {
     try {
       const data = await fetchCalendar(year, month);
       await cacheCalendar(year, month, data.days);
-      const todayRow = data.days.find((d) => d.date === today);
-      setHasTodayNightCap(
-        !!(
-          todayRow?.has_nightcap ||
-          todayRow?.has_entries ||
-          todayRow?.has_reflection
-        )
-      );
+      const todayRow = data.days.find((d) => d.date === today) ?? null;
+      setTodayRow(todayRow);
     } catch {
-      const todayRow = cached?.find((d) => d.date === today);
-      setHasTodayNightCap(
-        !!(
-          todayRow?.has_nightcap ||
-          todayRow?.has_entries ||
-          todayRow?.has_reflection
-        )
-      );
+      const cachedRow = cached?.find((d) => d.date === today) ?? null;
+      setTodayRow(cachedRow);
     }
   }, [today, loadGoals, goalsPeriod]);
 
@@ -108,6 +105,28 @@ export default function HomeScreen() {
     didNavigate.current = false;
     beginForDate(today, { reset: hasTodayNightCap });
     setMoonVisible(true);
+  }
+
+  async function onNudgePartner() {
+    if (!canNudgePartner || nudging) return;
+    setNudging(true);
+    setNudgeMessage(null);
+    try {
+      const { nudge } = await nudgePartner(today);
+      setTodayRow((current) =>
+        current?.partner
+          ? {
+              ...current,
+              partner: { ...current.partner, nudged_at: nudge.created_at },
+            }
+          : current
+      );
+      setNudgeMessage(nudgeSentMessage(nudge));
+    } catch (e) {
+      setNudgeMessage(e instanceof Error ? e.message : "Couldn’t send that nudge");
+    } finally {
+      setNudging(false);
+    }
   }
 
   const onMoonTransition = useCallback(() => {
@@ -151,14 +170,44 @@ export default function HomeScreen() {
           <Text style={styles.ritualEyebrow}>Tonight</Text>
           <Text style={styles.ritualTitle}>NightCap</Text>
           <Text style={styles.ritualBody}>
-            {hasTodayNightCap
-              ? "You’ve already logged tonight. Open it to update spend, habits, mood, or reflection."
-              : "Close out the day — groups, mood, and a short reflection."}
+            {incomingNudge
+              ? `${partner?.username} nudged you to close out tonight.`
+              : hasTodayNightCap
+                ? "You’ve already logged tonight. Open it to update spend, habits, mood, or reflection."
+                : "Close out the day — groups, mood, and a short reflection."}
           </Text>
-          <PrimaryButton
-            title={hasTodayNightCap ? "Edit NightCap" : "Start NightCap"}
-            onPress={startNightCap}
-          />
+          {partner && !incomingNudge ? (
+            <Text style={styles.partnerLine}>
+              {partner.has_nightcap
+                ? `${partner.username} already NightCap’d tonight.`
+                : partner.nudged_at
+                  ? `Nudged ${partner.username} · waiting`
+                  : `${partner.username} hasn’t NightCap’d yet.`}
+            </Text>
+          ) : null}
+          <View style={styles.ritualActions}>
+            <PrimaryButton
+              title={
+                incomingNudge
+                  ? "Start NightCap"
+                  : hasTodayNightCap
+                    ? "Edit NightCap"
+                    : "Start NightCap"
+              }
+              onPress={startNightCap}
+            />
+            {canNudgePartner ? (
+              <PrimaryButton
+                title={`Nudge ${partner?.username ?? "partner"}`}
+                variant="secondary"
+                onPress={() => void onNudgePartner()}
+                loading={nudging}
+              />
+            ) : null}
+          </View>
+          {nudgeMessage ? (
+            <Text style={styles.nudgeMessage}>{nudgeMessage}</Text>
+          ) : null}
           <Pressable
             onPress={() => router.push("/(tabs)/calendar")}
             style={styles.secondaryLink}
@@ -275,6 +324,21 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontSize: 15,
     lineHeight: 22,
+    color: colors.muted,
+  },
+  partnerLine: {
+    marginTop: -8,
+    marginBottom: 16,
+    fontSize: 14,
+    color: colors.accentSoft,
+  },
+  ritualActions: {
+    gap: 10,
+  },
+  nudgeMessage: {
+    marginTop: 12,
+    textAlign: "center",
+    fontSize: 13,
     color: colors.muted,
   },
   secondaryLink: {

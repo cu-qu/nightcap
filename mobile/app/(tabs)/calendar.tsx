@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import { fetchCalendar } from "@/src/api/calendar";
+import { nudgePartner, nudgeSentMessage } from "@/src/api/partnership";
 import { CalendarDaySummary } from "@/src/components/CalendarDaySummary";
 import { CalendarMonth } from "@/src/components/CalendarMonth";
 import { MoonRiseTransition } from "@/src/components/MoonRiseTransition";
@@ -22,6 +23,7 @@ import type { CalendarDay } from "@/src/types/api";
 import { SPEND_GROUP_KEY } from "@/src/types/api";
 import {
   ALL_FILTER,
+  dayHasNightCap,
   formatTotalsLine,
   groupFilterId,
   isSpendishCaption,
@@ -42,6 +44,8 @@ export default function CalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [filterId, setFilterId] = useState(ALL_FILTER);
   const [moonVisible, setMoonVisible] = useState(false);
+  const [nudging, setNudging] = useState(false);
+  const [nudgeMessage, setNudgeMessage] = useState<string | null>(null);
   const didNavigate = useRef(false);
 
   const load = useCallback(async (y: number, m: number) => {
@@ -108,21 +112,45 @@ export default function CalendarScreen() {
   function onSelectDate(date: string) {
     if (isFutureIsoDate(date)) return;
     setSelectedDate(date);
+    setNudgeMessage(null);
   }
 
   function startOrEditNightCap(date = selectedDate) {
     if (!date || isFutureIsoDate(date) || moonVisible) return;
     didNavigate.current = false;
     const day = days.find((d) => d.date === date);
-    const hasNightCap = !!(
-      day?.has_nightcap ||
-      day?.has_entries ||
-      day?.has_reflection ||
-      day?.has_favorite_photo ||
-      day?.favorite_moment
-    );
+    const hasNightCap = dayHasNightCap(day);
     beginForDate(date, { reset: hasNightCap });
     setMoonVisible(true);
+  }
+
+  async function onNudgePartner() {
+    if (!selectedDate || nudging) return;
+    setNudging(true);
+    setNudgeMessage(null);
+    try {
+      const { nudge } = await nudgePartner(selectedDate);
+      let nextDays: CalendarDay[] = [];
+      setDays((current) => {
+        nextDays = current.map((day) => {
+          if (day.date !== selectedDate || !day.partner) return day;
+          return {
+            ...day,
+            partner: {
+              ...day.partner,
+              nudged_at: nudge.created_at,
+            },
+          };
+        });
+        return nextDays;
+      });
+      await cacheCalendar(year, month, nextDays);
+      setNudgeMessage(nudgeSentMessage(nudge));
+    } catch (e) {
+      setNudgeMessage(e instanceof Error ? e.message : "Couldn’t send that nudge");
+    } finally {
+      setNudging(false);
+    }
   }
 
   const onMoonTransition = useCallback(() => {
@@ -209,6 +237,13 @@ export default function CalendarScreen() {
             date={selectedDate}
             filterId={filterId}
             onStartOrEdit={startOrEditNightCap}
+            onNudgePartner={
+              selectedDay?.partner && !isFutureIsoDate(selectedDate)
+                ? onNudgePartner
+                : undefined
+            }
+            nudging={nudging}
+            nudgeMessage={nudgeMessage}
           />
         ) : (
           <Text style={styles.selectHint}>

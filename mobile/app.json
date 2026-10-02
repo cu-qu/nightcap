@@ -62,8 +62,8 @@
         "expo-notifications",
         {
           "color": "#8B5CF6",
-          "defaultChannel": "nightcap-reminders",
-          "enableBackgroundRemoteNotifications": false
+          "defaultChannel": "nightcap-nudges",
+          "enableBackgroundRemoteNotifications": true
         }
       ],
       "expo-iap"

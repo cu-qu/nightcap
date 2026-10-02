@@ -158,6 +158,19 @@ class PartnershipJoinSerializer(serializers.Serializer):
     invite_code = serializers.CharField()
 
 
+class PartnershipNudgeSerializer(serializers.Serializer):
+    date = serializers.DateField()
+
+
+class DevicePushTokenSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=255)
+    platform = serializers.ChoiceField(
+        choices=["ios", "android", "web"],
+        required=False,
+        allow_blank=True,
+    )
+
+
 class BillingVerifySerializer(serializers.Serializer):
     platform = serializers.ChoiceField(choices=["apple", "google", "ios", "android"])
     purchase_token = serializers.CharField()

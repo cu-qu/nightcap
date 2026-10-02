@@ -257,3 +257,59 @@ class Membership(models.Model):
     def __str__(self):
         owner = self.partnership or self.user
         return f"Membership for {owner}"
+
+
+class DevicePushToken(models.Model):
+    """Expo push token so we can deliver partner NightCap nudges."""
+
+    PLATFORM_IOS = "ios"
+    PLATFORM_ANDROID = "android"
+    PLATFORM_WEB = "web"
+    PLATFORM_CHOICES = [
+        (PLATFORM_IOS, "iOS"),
+        (PLATFORM_ANDROID, "Android"),
+        (PLATFORM_WEB, "Web"),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="push_tokens")
+    token = models.CharField(max_length=255, unique=True)
+    platform = models.CharField(max_length=16, choices=PLATFORM_CHOICES, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "accounts_devicepushtoken"
+
+    def __str__(self):
+        return f"{self.platform} token for {self.user.username}"
+
+
+class PartnerNudge(models.Model):
+    """One partner asking the other to finish a NightCap for a calendar date."""
+
+    partnership = models.ForeignKey(
+        Partnership, on_delete=models.CASCADE, related_name="nudges"
+    )
+    from_user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="sent_nudges"
+    )
+    to_user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="received_nudges"
+    )
+    date = models.DateField(db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    delivered_via = models.CharField(max_length=32, blank=True)
+
+    class Meta:
+        db_table = "accounts_partnernudge"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["from_user", "to_user", "date"],
+                name="unique_partner_nudge_per_day",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.from_user.username} nudged {self.to_user.username} for {self.date}"

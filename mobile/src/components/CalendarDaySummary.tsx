@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 
-import { nightCapPhotoUrl } from "@/src/api/nightcaps";
+import { nightCapPhotoUrl, resolveNightCapPhotoUri } from "@/src/api/nightcaps";
 import { AuthenticatedImage } from "@/src/components/AuthenticatedImage";
 import { PrimaryButton } from "@/src/components/PrimaryButton";
 import { moodLabel } from "@/src/constants/moods";
@@ -9,6 +9,7 @@ import { iconFor } from "@/src/theme/iconMap";
 import type { CalendarDay } from "@/src/types/api";
 import {
   ALL_FILTER,
+  dayHasNightCap,
   formatQtyLong,
   formatSpendDelta,
   groupsForFilter,
@@ -20,6 +21,9 @@ type Props = {
   date: string;
   filterId?: string;
   onStartOrEdit: () => void;
+  onNudgePartner?: () => void;
+  nudging?: boolean;
+  nudgeMessage?: string | null;
 };
 
 export function CalendarDaySummary({
@@ -27,18 +31,19 @@ export function CalendarDaySummary({
   date,
   filterId = ALL_FILTER,
   onStartOrEdit,
+  onNudgePartner,
+  nudging = false,
+  nudgeMessage = null,
 }: Props) {
-  const hasNightCap = !!(
-    day?.has_nightcap ||
-    day?.has_entries ||
-    day?.has_reflection ||
-    day?.has_favorite_photo ||
-    day?.favorite_moment
-  );
+  const hasNightCap = dayHasNightCap(day);
   const mood = day?.mood?.trim() ?? "";
   const groups = groupsForFilter(day, filterId);
   const favoriteMoment = day?.favorite_moment?.trim() ?? "";
   const hasFavoritePhoto = !!day?.has_favorite_photo;
+  const partner = day?.partner ?? null;
+  const incomingNudge = !!partner?.incoming_nudge_at && !hasNightCap;
+  const canNudge =
+    !!partner && !partner.has_nightcap && !partner.nudged_at && !!onNudgePartner;
 
   return (
     <View style={styles.card}>
@@ -61,11 +66,36 @@ export function CalendarDaySummary({
         </View>
       </View>
 
+      {partner ? (
+        <Text style={styles.partnerStatus}>
+          {partner.has_nightcap
+            ? `${partner.username} NightCap’d this day`
+            : partner.nudged_at
+              ? `Nudged ${partner.username} · waiting`
+              : `${partner.username} hasn’t NightCap’d yet`}
+        </Text>
+      ) : null}
+
+      {incomingNudge ? (
+        <View style={styles.nudgeBanner}>
+          <Text style={styles.nudgeBannerTitle}>
+            {partner?.username} nudged you
+          </Text>
+          <Text style={styles.nudgeBannerBody}>
+            Close out {date === todayIso() ? "today" : "this day"} when you can.
+          </Text>
+        </View>
+      ) : null}
+
       {hasFavoritePhoto || favoriteMoment ? (
         <View style={styles.moments}>
           {hasFavoritePhoto ? (
             <AuthenticatedImage
-              uri={nightCapPhotoUrl(date)}
+              uri={resolveNightCapPhotoUri({
+                date,
+                photoUrl: day?.favorite_photo_url,
+              })}
+              fallbackUri={nightCapPhotoUrl(date)}
               style={styles.momentPhoto}
               accessibilityLabel="Favorite photo of the day"
             />
@@ -136,9 +166,26 @@ export function CalendarDaySummary({
       ) : null}
 
       <PrimaryButton
-        title={hasNightCap ? "Edit NightCap" : "Start NightCap"}
+        title={
+          incomingNudge
+            ? "Start NightCap"
+            : hasNightCap
+              ? "Edit NightCap"
+              : "Start NightCap"
+        }
         onPress={onStartOrEdit}
       />
+      {canNudge ? (
+        <PrimaryButton
+          title={`Nudge ${partner?.username ?? "partner"}`}
+          variant="secondary"
+          onPress={() => onNudgePartner?.()}
+          loading={nudging}
+        />
+      ) : null}
+      {nudgeMessage ? (
+        <Text style={styles.nudgeMessage}>{nudgeMessage}</Text>
+      ) : null}
     </View>
   );
 }
@@ -238,5 +285,33 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontStyle: "italic",
     color: colors.text,
+  },
+  partnerStatus: {
+    fontSize: 14,
+    color: colors.muted,
+  },
+  nudgeBanner: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: "rgba(139, 92, 246, 0.16)",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  nudgeBannerTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  nudgeBannerBody: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted,
+  },
+  nudgeMessage: {
+    textAlign: "center",
+    fontSize: 13,
+    color: colors.muted,
   },
 });

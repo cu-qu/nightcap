@@ -56,6 +56,7 @@ export type RitualDraftPersist = {
   favoritePhotoName: string;
   favoritePhotoType: string;
   hasRemotePhoto: boolean;
+  favoritePhotoUrl?: string;
   photoCleared: boolean;
 };
 

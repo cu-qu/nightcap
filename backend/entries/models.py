@@ -59,7 +59,10 @@ class NightCap(models.Model):
         blank=True,
         null=True,
         validators=[FileExtensionValidator(PHOTO_EXTENSIONS)],
-        help_text="Favorite photo of the day.",
+        help_text=(
+            "Favorite photo of the day. The ImageField stores the object key; "
+            "production media storage is Cloudflare R2."
+        ),
     )
     mood = models.CharField(
         max_length=32,

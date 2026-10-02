@@ -61,6 +61,7 @@ export default function NightCapEntryScreen() {
   const favoriteMoment = useRitualDraftStore((s) => s.favoriteMoment);
   const favoritePhotoUri = useRitualDraftStore((s) => s.favoritePhotoUri);
   const hasRemotePhoto = useRitualDraftStore((s) => s.hasRemotePhoto);
+  const favoritePhotoUrl = useRitualDraftStore((s) => s.favoritePhotoUrl);
   const setCategoryValue = useRitualDraftStore((s) => s.setCategoryValue);
   const setCompletedWith = useRitualDraftStore((s) => s.setCompletedWith);
   const setMood = useRitualDraftStore((s) => s.setMood);
@@ -350,6 +351,7 @@ export default function NightCapEntryScreen() {
             onChangeMoment={setFavoriteMoment}
             localPhotoUri={favoritePhotoUri}
             hasRemotePhoto={hasRemotePhoto}
+            remotePhotoUrl={favoritePhotoUrl}
             photoCacheKey={date}
             onPickedPhoto={setFavoritePhoto}
             onClearPhoto={clearFavoritePhoto}

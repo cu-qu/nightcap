@@ -41,6 +41,16 @@ export function groupsForFilter(
   return groups.filter((g) => groupMatchesFilter(g, filterId));
 }
 
+export function dayHasNightCap(day: CalendarDay | null | undefined): boolean {
+  return !!(
+    day?.has_nightcap ||
+    day?.has_entries ||
+    day?.has_reflection ||
+    day?.has_favorite_photo ||
+    day?.favorite_moment
+  );
+}
+
 export function formatSpendDelta(amount: number): string {
   if (!amount) return "";
   const n = Math.abs(amount);

@@ -7,6 +7,7 @@ from rest_framework import serializers
 from categories.models import TrackingCategory
 from categories.serializers import TrackingCategorySerializer
 
+from .media import nightcap_photo_url
 from .models import PHOTO_MAX_BYTES, DayReflection, Entry, NightCap
 
 
@@ -142,18 +143,6 @@ class DayReflectionSerializer(serializers.ModelSerializer):
         model = DayReflection
         fields = ("date", "reflection", "created_at", "updated_at")
         read_only_fields = ("date", "created_at", "updated_at")
-
-
-def nightcap_photo_url(obj, request=None) -> str | None:
-    if not obj.favorite_photo:
-        return None
-    path = f"/api/v1/nightcaps/{obj.date.isoformat()}/photo/"
-    stamp = int(obj.updated_at.timestamp()) if obj.updated_at else 0
-    if stamp:
-        path = f"{path}?t={stamp}"
-    if request is not None:
-        return request.build_absolute_uri(path)
-    return path
 
 
 class NightCapPhotoSerializer(serializers.Serializer):
@@ -391,6 +380,14 @@ class CalendarGroupSummarySerializer(serializers.Serializer):
     categories = CalendarCategorySummarySerializer(many=True, required=False)
 
 
+class CalendarPartnerSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    has_nightcap = serializers.BooleanField()
+    nightcap_status = serializers.CharField(allow_null=True, required=False)
+    nudged_at = serializers.DateTimeField(allow_null=True)
+    incoming_nudge_at = serializers.DateTimeField(allow_null=True)
+
+
 class CalendarDaySerializer(serializers.Serializer):
     date = serializers.DateField()
     has_entries = serializers.BooleanField()
@@ -399,11 +396,13 @@ class CalendarDaySerializer(serializers.Serializer):
     nightcap_status = serializers.CharField(allow_null=True, required=False)
     mood = serializers.CharField(allow_blank=True, required=False)
     has_favorite_photo = serializers.BooleanField(required=False)
+    favorite_photo_url = serializers.CharField(allow_null=True, required=False)
     favorite_moment = serializers.CharField(allow_blank=True, required=False)
     entry_count = serializers.IntegerField()
     expense_total = serializers.DecimalField(max_digits=12, decimal_places=2)
     habit_count = serializers.IntegerField()
     groups = CalendarGroupSummarySerializer(many=True)
+    partner = CalendarPartnerSerializer(allow_null=True, required=False)
 
 
 class CalendarResponseSerializer(serializers.Serializer):

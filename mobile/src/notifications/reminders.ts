@@ -3,6 +3,7 @@ import * as Notifications from "expo-notifications";
 
 export const REMINDER_ID = "nightcap-daily-reminder";
 export const REMINDER_CHANNEL_ID = "nightcap-reminders";
+export const NUDGE_CHANNEL_ID = "nightcap-nudges";
 export const REMINDER_PATH = "/ritual/spend" as const;
 export const DEFAULT_REMINDER_HOUR = 21;
 export const DEFAULT_REMINDER_MINUTE = 0;
@@ -39,10 +40,16 @@ export function dateFromReminderTime(hour: number, minute: number): Date {
   return date;
 }
 
-async function ensureAndroidChannel() {
+async function ensureAndroidChannels() {
   if (Platform.OS !== "android") return;
   await Notifications.setNotificationChannelAsync(REMINDER_CHANNEL_ID, {
     name: "Nightly reminder",
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 200, 150, 200],
+    lightColor: "#8B5CF6",
+  });
+  await Notifications.setNotificationChannelAsync(NUDGE_CHANNEL_ID, {
+    name: "Partner nudges",
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 200, 150, 200],
     lightColor: "#8B5CF6",
@@ -66,12 +73,20 @@ export async function hasReminderPermission(): Promise<boolean> {
   }
 }
 
+export const hasNotificationPermission = hasReminderPermission;
+
 export async function requestReminderPermission(): Promise<boolean> {
   if (!nativeNotifications) return false;
   try {
-    await ensureAndroidChannel();
+    await ensureAndroidChannels();
     if (await hasReminderPermission()) return true;
-    const requested = await Notifications.requestPermissionsAsync();
+    const requested = await Notifications.requestPermissionsAsync({
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+      },
+    });
     if (requested.granted) return true;
     if (
       Platform.OS === "ios" &&
@@ -84,6 +99,8 @@ export async function requestReminderPermission(): Promise<boolean> {
     return false;
   }
 }
+
+export const requestNotificationPermission = requestReminderPermission;
 
 export async function cancelNightlyReminder(): Promise<void> {
   if (!nativeNotifications) return;

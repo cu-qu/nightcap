@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 
 from core.permissions import HasActiveMembership
 
+from accounts.nudges import register_push_token, send_partner_nudge, unregister_push_token
 from accounts.partnerships import (
     accept_invite_code,
     ensure_partnership,
@@ -15,7 +16,13 @@ from accounts.partnerships import (
     send_partner_invite,
     serialize_partnership,
 )
-from accounts.serializers import MessageSerializer, PartnershipInviteSerializer, PartnershipJoinSerializer
+from accounts.serializers import (
+    DevicePushTokenSerializer,
+    MessageSerializer,
+    PartnershipInviteSerializer,
+    PartnershipJoinSerializer,
+    PartnershipNudgeSerializer,
+)
 
 
 class PartnershipView(APIView):
@@ -127,3 +134,58 @@ class PartnershipRegenerateCodeView(APIView):
             )
         regenerate_invite_code(partnership)
         return Response({"partnership": serialize_partnership(partnership)})
+
+
+class PartnershipNudgeView(APIView):
+    permission_classes = [IsAuthenticated, HasActiveMembership]
+
+    @extend_schema(
+        tags=["Partnership"],
+        summary="Nudge partner to NightCap",
+        description=(
+            "Sends a nudge for a calendar date your partner has not logged yet. "
+            "Delivered by email, push if they have a registered device, and in-app. "
+            "One nudge per partner per date."
+        ),
+        request=PartnershipNudgeSerializer,
+    )
+    def post(self, request):
+        serializer = PartnershipNudgeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = send_partner_nudge(request.user, serializer.validated_data["date"])
+        status_code = (
+            status.HTTP_200_OK if payload["already_sent"] else status.HTTP_201_CREATED
+        )
+        return Response({"nudge": payload}, status=status_code)
+
+
+class DevicePushTokenView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Partnership"],
+        summary="Register device push token",
+        request=DevicePushTokenSerializer,
+        responses={200: MessageSerializer},
+    )
+    def post(self, request):
+        serializer = DevicePushTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        register_push_token(
+            request.user,
+            serializer.validated_data["token"],
+            serializer.validated_data.get("platform") or "",
+        )
+        return Response({"detail": "Registered."})
+
+    @extend_schema(
+        tags=["Partnership"],
+        summary="Remove device push token",
+        request=DevicePushTokenSerializer,
+        responses={200: MessageSerializer},
+    )
+    def delete(self, request):
+        serializer = DevicePushTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        unregister_push_token(request.user, serializer.validated_data["token"])
+        return Response({"detail": "Removed."})

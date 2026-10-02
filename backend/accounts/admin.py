@@ -3,7 +3,16 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils import timezone
 
 from accounts.memberships import grant_complimentary_membership, revoke_complimentary_membership
-from .models import Membership, Partnership, PartnershipInvite, PartnershipMember, User, UserProfile
+from .models import (
+    DevicePushToken,
+    Membership,
+    PartnerNudge,
+    Partnership,
+    PartnershipInvite,
+    PartnershipMember,
+    User,
+    UserProfile,
+)
 
 
 class UserProfileInline(admin.StackedInline):
@@ -146,3 +155,17 @@ class MembershipAdmin(admin.ModelAdmin):
             granted_at=None,
             grant_note="",
         )
+
+
+@admin.register(DevicePushToken)
+class DevicePushTokenAdmin(admin.ModelAdmin):
+    list_display = ("user", "platform", "updated_at")
+    search_fields = ("user__username", "token")
+    list_filter = ("platform",)
+
+
+@admin.register(PartnerNudge)
+class PartnerNudgeAdmin(admin.ModelAdmin):
+    list_display = ("from_user", "to_user", "date", "created_at", "delivered_via")
+    search_fields = ("from_user__username", "to_user__username")
+    list_filter = ("date",)

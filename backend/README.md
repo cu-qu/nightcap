@@ -52,6 +52,8 @@ API docs are available at http://localhost:8000/api/docs/.
 - `POST /api/v1/billing/verify/` — verify App Store / Play purchase
 - `GET/POST /api/v1/partnership/` — couple space + invite code
 - `POST /api/v1/partnership/invite/` / `join/` / `leave/`
+- `POST /api/v1/partnership/nudge/` — `{ date }` nudge your partner to NightCap that day
+- `POST/DELETE /api/v1/devices/push-token/` — Expo token for partner nudges
 - `POST /api/v1/onboarding/setup/` — solo vs couple, templates, optional email invite
 - `GET/POST /api/v1/categories/` (includes stable `uuid` and optional `group`)
 - `GET/POST /api/v1/category-groups/` — configurable NightCap sections
@@ -61,7 +63,7 @@ API docs are available at http://localhost:8000/api/docs/.
 - `GET /api/v1/entries/period-summary/?period=weekly|monthly`
 - `GET/POST /api/v1/nightcaps/` — one NightCap record per user per day
 - `GET/PATCH /api/v1/nightcaps/{YYYY-MM-DD}/`
-- `GET/POST/DELETE /api/v1/nightcaps/{YYYY-MM-DD}/photo/` — favorite photo of the day (Django `ImageField`)
+- `GET/POST/DELETE /api/v1/nightcaps/{YYYY-MM-DD}/photo/` — favorite photo of the day (`NightCap.favorite_photo`; Cloudflare R2 in production)
 - `GET /api/v1/ritual/shared/?date=` — partner values on Together categories for that NightCap date
 - `POST /api/v1/ritual/` — nightly batch upsert (creates/updates NightCap + entries + reflection)
 - `GET/PUT/PATCH /api/v1/day-reflections/{YYYY-MM-DD}/` (legacy; prefer NightCaps)
@@ -108,6 +110,21 @@ python manage.py grant_membership --username friend --revoke
 That grant is NightCap-side (no App Store charge). Apple does not let you push a subscription onto someone's Apple ID from the server.
 
 To grant a **real App Store subscription** (free period / lifetime of a code), create **Subscription Offer Codes** in App Store Connect for `com.nightcap.app.couple.monthly` or `com.nightcap.app.couple.yearly`. The person redeems them in the app (**Redeem Apple offer code** on the paywall). StoreKit then reports a purchase and `/api/v1/billing/verify/` entitles the couple.
+
+## Cloudflare R2 (favorite photos)
+
+`NightCap.favorite_photo` is a Django `ImageField`. Production/stage use Cloudflare R2 when these environment variables are set:
+
+| Variable | Notes |
+|---|---|
+| `R2_ACCOUNT_ID` | Cloudflare account ID (builds the S3 endpoint) |
+| `R2_BUCKET_NAME` | Private bucket |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | R2 S3 API token |
+| `R2_ENDPOINT_URL` | Optional override; default `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` |
+| `R2_ENABLED` | Optional. `true` to use R2 locally; `false` to force disk even in production |
+| `R2_SIGNED_URL_EXPIRE` | Seconds for signed GET URLs (default 3600) |
+
+Keep the bucket **private**. JSON fields `favorite_photo_url` and recap `photo_url` are signed object URLs. Local/DEBUG keeps files on disk and those fields point at `GET /api/v1/nightcaps/{date}/photo/`.
 
 ### Mobile docs
 

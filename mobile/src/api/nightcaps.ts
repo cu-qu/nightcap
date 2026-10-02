@@ -13,8 +13,40 @@ export function nightCapPhotoUrl(date: string, cacheKey?: string): string {
   const path = nightCapPhotoPath(date);
   const url = `${getApiBaseUrl()}${path}`;
   if (!cacheKey) return url;
+  return withCacheKey(url, cacheKey);
+}
+
+export function isApiMediaUri(uri: string): boolean {
+  if (!uri) return false;
+  if (uri.startsWith("/")) return true;
+  const base = getApiBaseUrl();
+  try {
+    return new URL(uri).origin === new URL(base).origin;
+  } catch {
+    return uri.startsWith(base);
+  }
+}
+
+function withCacheKey(url: string, cacheKey: string): string {
   const sep = url.includes("?") ? "&" : "?";
   return `${url}${sep}t=${encodeURIComponent(cacheKey)}`;
+}
+
+/** Prefer the model field (`favorite_photo_url` / recap `photo_url`), which is a signed R2 URL in production. */
+export function resolveNightCapPhotoUri(opts: {
+  date: string;
+  photoUrl?: string | null;
+  cacheKey?: string;
+}): string {
+  const url = opts.photoUrl?.trim();
+  if (url) {
+    const absolute = url.startsWith("/") ? `${getApiBaseUrl()}${url}` : url;
+    if (opts.cacheKey && isApiMediaUri(absolute)) {
+      return withCacheKey(absolute, opts.cacheKey);
+    }
+    return absolute;
+  }
+  return nightCapPhotoUrl(opts.date, opts.cacheKey);
 }
 
 export async function uploadNightCapPhoto(

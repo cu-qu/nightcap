@@ -37,6 +37,8 @@ NightCap is couple habit tracking with personal goals.
 - `POST /api/v1/partnership/invite/` — `{ email? }` share code; emails if provided
 - `POST /api/v1/partnership/join/` — `{ invite_code }` copies shared goals onto the joining account
 - `POST /api/v1/partnership/leave/` — unlink; together goals become personal; remaining partner keeps a new invite code
+- `POST /api/v1/partnership/nudge/` — `{ date }` ask your partner to finish that day’s NightCap. Sends an iOS/Android push notification when they have a registered device token; emails if push is unavailable. One nudge per date.
+- `POST /api/v1/devices/push-token/` — `{ token, platform? }` register an Expo push token for partner nudges; `DELETE` with `{ token }` to remove it
 - `GET /api/v1/onboarding/templates/?mode=solo|couple` — spend / workout / habit starters (`Together` vs `Just me` via `suggested_scope`)
 - `POST /api/v1/onboarding/setup/` — `{ mode, templates: [{ slug, scope?, target_value? }], invite_email? }` creates the couple space if needed, applies goals, marks onboarding complete
 
@@ -86,11 +88,13 @@ Fields: `uuid`, `date`, `reflection`, `favorite_moment`, `has_favorite_photo`, `
 
 `favorite_moment` (optional) — a short text memory from the day.
 
-Favorite photo is stored on the NightCap `ImageField`. Upload separately (multipart), not in the JSON ritual body:
+Favorite photo is stored on the NightCap `ImageField` (`favorite_photo`). The database keeps the object key (`nightcaps/{user_id}/{date}/{uuid}.ext`). Production media storage is **Cloudflare R2**; `favorite_photo_url` is a time-limited signed object URL. Locally it is the authenticated API photo route. Upload separately (multipart), not in the JSON ritual body:
 
-- `GET /api/v1/nightcaps/{YYYY-MM-DD}/photo/` — authenticated image bytes (404 if none)
+- `GET /api/v1/nightcaps/{YYYY-MM-DD}/photo/` — authenticated image bytes (404 if none). Still works as a fallback when a signed URL expires.
 - `POST /api/v1/nightcaps/{YYYY-MM-DD}/photo/` — multipart field `photo` (JPEG/PNG/WebP, max 8 MB)
 - `DELETE /api/v1/nightcaps/{YYYY-MM-DD}/photo/` — remove the saved photo
+
+The iOS client should display `favorite_photo_url` / recap `photo_url` from the JSON payload (do not reconstruct the photo path). Only send the JWT when the URL is the API host.
 
 `mood` (optional) — any short emoji/string (max 32 chars). Suggested presets:
 
@@ -187,7 +191,7 @@ Response:
 
 `GET /api/v1/calendar/?year=2026&month=7`
 
-Each day includes NightCap mood plus a **groups** summary for category groups that had entries that night (active groups recorded on the NightCap).
+Each day includes NightCap mood plus a **groups** summary for category groups that had entries that night (active groups recorded on the NightCap). When you are linked with a partner, `partner` includes their username, whether they have logged that day, `nudged_at` if you already nudged them, and `incoming_nudge_at` if they nudged you and you have not logged yet. Otherwise `partner` is `null`.
 
 ```json
 {
@@ -202,10 +206,18 @@ Each day includes NightCap mood plus a **groups** summary for category groups th
       "nightcap_status": "completed",
       "mood": "🙂",
       "has_favorite_photo": true,
+      "favorite_photo_url": "https://<accountid>.r2.cloudflarestorage.com/nightcap-media/media/nightcaps/…",
       "favorite_moment": "Sunset on the walk home.",
       "entry_count": 4,
       "expense_total": "42.10",
       "habit_count": 2,
+      "partner": {
+        "username": "sam",
+        "has_nightcap": false,
+        "nightcap_status": null,
+        "nudged_at": "2026-07-13T21:04:00Z",
+        "incoming_nudge_at": null
+      },
       "groups": [
         {
           "uuid": "...",

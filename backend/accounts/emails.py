@@ -120,3 +120,25 @@ class PartnerInviteEmail:
             tags=["partner-invite"],
         )
 
+
+@dataclass
+class PartnerNudgeEmail:
+    """Ask a linked partner to finish their NightCap for a day."""
+
+    to_email: str
+    from_username: str
+    day_label: str
+
+    def send(self) -> None:
+        send_transactional_mail(
+            subject=f"{self.from_username} nudged you to NightCap",
+            text_template="emails/partner_nudge.txt",
+            html_template="emails/partner_nudge.html",
+            context={
+                "from_username": self.from_username,
+                "day_label": self.day_label,
+            },
+            to_email=self.to_email,
+            tags=["partner-nudge"],
+        )
+

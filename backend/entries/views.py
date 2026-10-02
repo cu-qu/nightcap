@@ -472,8 +472,11 @@ class NightCapViewSet(viewsets.ModelViewSet):
         tags=["NightCaps"],
         summary="Favorite photo of the day",
         description=(
-            "GET streams the saved photo. POST multipart field `photo` uploads "
-            "or replaces it (JPEG/PNG/WebP, max 8 MB). DELETE removes it. "
+            "GET streams the saved photo (and will pull from R2 when that "
+            "storage is enabled). POST multipart field `photo` uploads or "
+            "replaces it (JPEG/PNG/WebP, max 8 MB). DELETE removes it. "
+            "JSON responses expose `favorite_photo_url`: a signed R2 object "
+            "URL in production, or this authenticated proxy locally. "
             "Photos are private to the signed-in user."
         ),
         request={"multipart/form-data": NightCapPhotoSerializer},
@@ -630,7 +633,7 @@ class CalendarView(APIView):
         today = timezone.localdate()
         year = query.validated_data.get("year") or today.year
         month = query.validated_data.get("month") or today.month
-        payload = calendar_month(request.user, year, month)
+        payload = calendar_month(request.user, year, month, request=request)
         return Response(CalendarResponseSerializer(payload).data)
 
 

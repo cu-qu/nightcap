@@ -3,6 +3,8 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
+from config.r2 import configured_media_storages, r2_is_enabled
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
@@ -108,10 +110,13 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "mediafiles"
-# Favorite photos are stored on NightCap.ImageField; 12 MB leaves headroom
-# above the 8 MB serializer cap so multipart parsing does not reject first.
+# Favorite photos live on NightCap.favorite_photo (ImageField). Production uses
+# Cloudflare R2 when R2_* credentials are set; local/DEBUG stays on disk.
+# 12 MB leaves headroom above the 8 MB serializer cap so multipart parsing
+# does not reject first.
 DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("DATA_UPLOAD_MAX_MEMORY_SIZE", 12 * 1024 * 1024))
 FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("FILE_UPLOAD_MAX_MEMORY_SIZE", 8 * 1024 * 1024))
+USE_R2_STORAGE = r2_is_enabled(debug=DEBUG)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -221,16 +226,7 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 
-STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-        "OPTIONS": {"location": str(MEDIA_ROOT)},
-    },
-    "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
-        "OPTIONS": {"location": str(STATIC_ROOT)},
-    },
-}
+STORAGES = configured_media_storages(USE_R2_STORAGE, MEDIA_ROOT, STATIC_ROOT)
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "NightCap API",

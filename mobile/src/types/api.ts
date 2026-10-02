@@ -257,11 +257,21 @@ export type CalendarDay = {
   /** NightCap mood emoji/string for the day (may be empty). */
   mood?: string;
   has_favorite_photo?: boolean;
+  favorite_photo_url?: string | null;
   favorite_moment?: string;
   entry_count: number;
   expense_total: string;
   habit_count: number;
   groups?: CalendarGroupSummary[];
+  partner?: CalendarPartner | null;
+};
+
+export type CalendarPartner = {
+  username: string;
+  has_nightcap: boolean;
+  nightcap_status?: string | null;
+  nudged_at?: string | null;
+  incoming_nudge_at?: string | null;
 };
 
 export type CalendarResponse = {

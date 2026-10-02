@@ -14,13 +14,13 @@ Contact: [night_cap_app@proton.me](mailto:night_cap_app@proton.me)
 
 **Photos.** If you add a favorite photo of the day, we store that image on our servers so it can sync and appear in recaps. We access the camera or photo library only when you choose to add a photo.
 
-**Partner sharing.** If you join a couple space, we store the invite code and the other person’s username and email so you can link accounts. Shared goals and together check-ins include both people’s matching category values. Favorite photos stay private to the person who uploaded them.
+**Partner sharing.** If you join a couple space, we store the invite code and the other person’s username and email so you can link accounts. Shared goals and together check-ins include both people’s matching category values. Favorite photos stay private to the person who uploaded them. Linked partners can send each other a NightCap nudge for a day that is not logged yet.
 
-**Notifications.** If you turn on the nightly reminder, the app schedules a local notification on your device. We do not send marketing push campaigns.
+**Notifications.** If you turn on the nightly reminder, the app schedules a local notification on your device. Partner nudges are sent as an iPhone (or Android) push notification when a device token is available, or as transactional email if push cannot be delivered. We do not send marketing push campaigns.
 
 **Subscriptions.** If you subscribe, Apple or Google processes the payment. We receive a store transaction identifier, product id, expiry, and auto-renew status so we can unlock NightCap. We do not receive your card number.
 
-**Technical.** Authentication tokens on the device (iOS Keychain / Android Keystore), and standard server logs needed to run the API (IP address, timestamps, error traces). We do not use advertising identifiers or cross-app tracking.
+**Technical.** Authentication tokens on the device (iOS Keychain / Android Keystore), optional Expo push tokens used only to deliver partner nudges, and standard server logs needed to run the API (IP address, timestamps, error traces). We do not use advertising identifiers or cross-app tracking.
 
 ## How we use information
 

@@ -1,9 +1,11 @@
 from django.urls import path
 
 from .partnership_views import (
+    DevicePushTokenView,
     PartnershipInviteView,
     PartnershipJoinView,
     PartnershipLeaveView,
+    PartnershipNudgeView,
     PartnershipRegenerateCodeView,
     PartnershipView,
 )
@@ -18,4 +20,6 @@ urlpatterns = [
         PartnershipRegenerateCodeView.as_view(),
         name="partnership-regenerate-code",
     ),
+    path("partnership/nudge/", PartnershipNudgeView.as_view(), name="partnership-nudge"),
+    path("devices/push-token/", DevicePushTokenView.as_view(), name="device-push-token"),
 ]

@@ -13,8 +13,8 @@ from django.utils import timezone
 
 from categories.models import TrackingCategory
 
+from .media import nightcap_photo_url
 from .models import Entry, NightCap
-from .serializers import nightcap_photo_url
 from .services import finance_totals
 
 PHOTO_LIMIT_MONTH = 16

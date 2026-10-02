@@ -26,7 +26,13 @@ import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { ReminderTimePicker } from "@/src/components/ReminderTimePicker";
 import { LEGAL_URLS } from "@/src/iap/products";
 import { useCoupleIap } from "@/src/iap/useCoupleIap";
-import { formatReminderTime, remindersSupported } from "@/src/notifications/reminders";
+import { registerPushTokenIfPossible } from "@/src/notifications/push";
+import {
+  formatReminderTime,
+  hasNotificationPermission,
+  remindersSupported,
+  requestNotificationPermission,
+} from "@/src/notifications/reminders";
 import { useAuthStore } from "@/src/store/authStore";
 import { useReminderStore } from "@/src/store/reminderStore";
 import { colors } from "@/src/theme/colors";
@@ -47,6 +53,8 @@ export default function SettingsScreen() {
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [reminderBusy, setReminderBusy] = useState(false);
   const [reminderMessage, setReminderMessage] = useState<string | null>(null);
+  const [notifyAllowed, setNotifyAllowed] = useState(false);
+  const [notifyBusy, setNotifyBusy] = useState(false);
 
   const reminderEnabled = useReminderStore((s) => s.enabled);
   const reminderHour = useReminderStore((s) => s.hour);
@@ -65,6 +73,9 @@ export default function SettingsScreen() {
   useFocusEffect(
     useCallback(() => {
       void refreshUser();
+      if (remindersSupported()) {
+        void hasNotificationPermission().then(setNotifyAllowed);
+      }
     }, [refreshUser])
   );
 
@@ -143,6 +154,8 @@ export default function SettingsScreen() {
       setInviteMessage(
         linked ? `Linked with ${linked.username}` : "You're linked with your partner."
       );
+      const allowed = await registerPushTokenIfPossible({ prompt: true });
+      setNotifyAllowed(allowed);
     } catch (e) {
       setInviteMessage(e instanceof Error ? e.message : "Could not link with that code");
     } finally {
@@ -283,7 +296,33 @@ export default function SettingsScreen() {
               <Text style={styles.partnerName}>{other.username}</Text>
               <Text style={styles.partnerSub}>
                 Shared goals count both of you. Personal goals stay private.
+                Nudge them from Home or Calendar and they’ll get an iPhone
+                notification to finish that day’s NightCap.
               </Text>
+              {remindersSupported() && !notifyAllowed ? (
+                <PrimaryButton
+                  title="Allow iPhone notifications"
+                  variant="secondary"
+                  loading={notifyBusy}
+                  onPress={() => {
+                    void (async () => {
+                      setNotifyBusy(true);
+                      try {
+                        const allowed = await requestNotificationPermission();
+                        setNotifyAllowed(allowed);
+                        if (allowed) await registerPushTokenIfPossible();
+                        else {
+                          setInviteMessage(
+                            "Notifications are off for NightCap. Enable them in iOS Settings."
+                          );
+                        }
+                      } finally {
+                        setNotifyBusy(false);
+                      }
+                    })();
+                  }}
+                />
+              ) : null}
               <PrimaryButton
                 title="Unlink partner"
                 variant="secondary"

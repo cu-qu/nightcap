@@ -152,4 +152,8 @@ class NightCapMomentsTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         day_row = next(d for d in resp.json()["days"] if d["date"] == self.today)
         self.assertTrue(day_row["has_favorite_photo"])
+        self.assertIn(
+            f"/api/v1/nightcaps/{self.today}/photo/",
+            day_row["favorite_photo_url"],
+        )
         self.assertEqual(day_row["favorite_moment"], "First snow.")

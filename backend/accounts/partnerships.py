@@ -18,6 +18,15 @@ def get_user_partnership(user) -> Partnership | None:
         return None
 
 
+def get_partner_user(user):
+    """The other person in the caller's couple space, if linked."""
+    partnership = get_user_partnership(user)
+    if partnership is None:
+        return None
+    member = partnership.members.exclude(user=user).select_related("user").first()
+    return member.user if member else None
+
+
 def serialize_partnership(partnership: Partnership | None) -> dict | None:
     if partnership is None:
         return None

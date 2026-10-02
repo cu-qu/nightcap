@@ -39,3 +39,44 @@ export async function joinPartnership(invite_code: string): Promise<{
 export async function leavePartnership(): Promise<{ partnership: null }> {
   return apiRequest("/api/v1/partnership/leave/", { method: "POST" });
 }
+
+export type PartnerNudge = {
+  date: string;
+  from_username: string;
+  to_username: string;
+  created_at: string;
+  already_sent: boolean;
+  delivered_via: string[];
+};
+
+export async function nudgePartner(date: string): Promise<{ nudge: PartnerNudge }> {
+  return apiRequest("/api/v1/partnership/nudge/", {
+    method: "POST",
+    body: { date },
+  });
+}
+
+export async function registerDevicePushToken(input: {
+  token: string;
+  platform?: string;
+}): Promise<{ detail: string }> {
+  return apiRequest("/api/v1/devices/push-token/", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function removeDevicePushToken(token: string): Promise<{ detail: string }> {
+  return apiRequest("/api/v1/devices/push-token/", {
+    method: "DELETE",
+    body: { token },
+  });
+}
+
+export function nudgeSentMessage(nudge: PartnerNudge): string {
+  if (nudge.already_sent) return `Already nudged ${nudge.to_username}`;
+  if (nudge.delivered_via.includes("push")) {
+    return `Notification sent to ${nudge.to_username}`;
+  }
+  return `Nudged ${nudge.to_username}`;
+}

@@ -56,6 +56,7 @@ type RitualDraftState = {
   favoritePhotoName: string;
   favoritePhotoType: string;
   hasRemotePhoto: boolean;
+  favoritePhotoUrl: string;
   photoCleared: boolean;
   setDate: (date: string) => void;
   beginForDate: (date: string, opts?: { reset?: boolean }) => void;
@@ -92,6 +93,7 @@ export const useRitualDraftStore = create<RitualDraftState>((set, get) => ({
   favoritePhotoName: "",
   favoritePhotoType: "",
   hasRemotePhoto: false,
+  favoritePhotoUrl: "",
   photoCleared: false,
 
   setDate: (date) => {
@@ -117,6 +119,7 @@ export const useRitualDraftStore = create<RitualDraftState>((set, get) => ({
       favoritePhotoName: "",
       favoritePhotoType: "",
       hasRemotePhoto: false,
+      favoritePhotoUrl: "",
       photoCleared: false,
     });
     void get().persist();
@@ -200,6 +203,7 @@ export const useRitualDraftStore = create<RitualDraftState>((set, get) => ({
       favoritePhotoName: "",
       favoritePhotoType: "",
       hasRemotePhoto: false,
+      favoritePhotoUrl: "",
       photoCleared: hadRemote || get().photoCleared,
     });
     void get().persist();
@@ -264,6 +268,9 @@ export const useRitualDraftStore = create<RitualDraftState>((set, get) => ({
       : get().photoCleared
         ? false
         : !!nightcap.has_favorite_photo;
+    const favoritePhotoUrl = hasRemotePhoto
+      ? nightcap.favorite_photo_url || get().favoritePhotoUrl
+      : "";
 
     set({
       spendValues,
@@ -274,6 +281,7 @@ export const useRitualDraftStore = create<RitualDraftState>((set, get) => ({
       reflection,
       favoriteMoment,
       hasRemotePhoto,
+      favoritePhotoUrl,
     });
     void get().persist();
   },
@@ -292,6 +300,7 @@ export const useRitualDraftStore = create<RitualDraftState>((set, get) => ({
       favoritePhotoName: "",
       favoritePhotoType: "",
       hasRemotePhoto: false,
+      favoritePhotoUrl: "",
       photoCleared: false,
     });
     void get().persist();
@@ -315,6 +324,7 @@ export const useRitualDraftStore = create<RitualDraftState>((set, get) => ({
       favoritePhotoName: draft.favoritePhotoName ?? "",
       favoritePhotoType: draft.favoritePhotoType ?? "",
       hasRemotePhoto: !!draft.hasRemotePhoto,
+      favoritePhotoUrl: draft.favoritePhotoUrl ?? "",
       photoCleared: !!draft.photoCleared,
     });
   },
@@ -338,6 +348,7 @@ export const useRitualDraftStore = create<RitualDraftState>((set, get) => ({
           favoritePhotoName,
           favoritePhotoType,
           hasRemotePhoto,
+          favoritePhotoUrl,
           photoCleared,
         } = get();
         await saveRitualDraft({
@@ -353,6 +364,7 @@ export const useRitualDraftStore = create<RitualDraftState>((set, get) => ({
           favoritePhotoName,
           favoritePhotoType,
           hasRemotePhoto,
+          favoritePhotoUrl,
           photoCleared,
         });
       })

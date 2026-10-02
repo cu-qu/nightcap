@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { nightCapPhotoUrl } from "@/src/api/nightcaps";
+import { nightCapPhotoUrl, resolveNightCapPhotoUri } from "@/src/api/nightcaps";
 import { AuthenticatedImage } from "@/src/components/AuthenticatedImage";
 import { PrimaryButton } from "@/src/components/PrimaryButton";
 import { colors } from "@/src/theme/colors";
@@ -52,7 +52,11 @@ function PhotoGrid({ photos }: { photos: RecapPhoto[] }) {
       {photos.map((photo) => (
         <View key={photo.date} style={{ width: tile }}>
           <AuthenticatedImage
-            uri={nightCapPhotoUrl(photo.date)}
+            uri={resolveNightCapPhotoUri({
+              date: photo.date,
+              photoUrl: photo.photo_url,
+            })}
+            fallbackUri={nightCapPhotoUrl(photo.date)}
             style={[styles.photo, { width: tile, height }]}
             accessibilityLabel={
               photo.favorite_moment
@@ -80,7 +84,11 @@ function MomentsList({ moments }: { moments: RecapMoment[] }) {
         <View key={moment.date} style={styles.momentCard}>
           {moment.has_photo ? (
             <AuthenticatedImage
-              uri={nightCapPhotoUrl(moment.date)}
+              uri={resolveNightCapPhotoUri({
+                date: moment.date,
+                photoUrl: moment.photo_url,
+              })}
+              fallbackUri={nightCapPhotoUrl(moment.date)}
               style={styles.momentPhoto}
               accessibilityLabel={
                 moment.text
