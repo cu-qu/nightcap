@@ -61,7 +61,15 @@ export default defineRailway(() => {
     env: appEnv,
   });
 
+  const shell = service("nightcap", {
+    source,
+    build: {
+      builder: "DOCKERFILE",
+      dockerfilePath: "/backend/Dockerfile",
+    },
+  });
+
   return project("nightcap api", {
-    resources: [db, cache, api, worker, beat],
+    resources: [db, cache, api, worker, beat, shell],
   });
 });
