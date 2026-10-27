@@ -13,7 +13,7 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.nightcap.app"
+        "EXPO_PUBLIC_API_URL": "https://nightcap-api-production-ce8f.up.railway.app"
       }
     }
   },

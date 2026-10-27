@@ -4,7 +4,7 @@ End of Day Ritual Tracker — Expo client for the NightCap Django API.
 
 ## Stack
 
-- Expo (SDK 57) + TypeScript + Expo Router
+- Expo (SDK 58) + TypeScript + Expo Router
 - NativeWind (Tailwind)
 - Zustand
 - expo-sqlite (draft + ritual outbox)
