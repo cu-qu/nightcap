@@ -6,6 +6,7 @@ import type {
 import { SPEND_GROUP_KEY } from "@/src/types/api";
 import { formatCurrency } from "@/src/utils/date";
 import { ALL_FILTER, formatQtyCompact, formatQtyLong } from "@/src/utils/calendarStats";
+import { unitTitle } from "@/src/utils/units";
 
 export const TOGETHER_FILTER = "together";
 export const ALONE_FILTER = "alone";
@@ -130,25 +131,7 @@ export function seriesForFilter(
 }
 
 function quantitySeriesTitle(unit: string): string {
-  switch (unit) {
-    case "minutes":
-      return "Minutes";
-    case "miles":
-      return "Miles";
-    case "km":
-    case "kilometers":
-      return "Kilometers";
-    case "sessions":
-      return "Sessions";
-    case "reps":
-      return "Reps";
-    case "pages":
-      return "Pages";
-    case "glasses":
-      return "Glasses";
-    default:
-      return "Count";
-  }
+  return unitTitle(unit);
 }
 
 export function pointValue(

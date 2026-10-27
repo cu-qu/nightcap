@@ -77,7 +77,7 @@ export function categoryPhaseLabel(cat: Category): string {
 
 export function categoryUnitLabel(cat: Category): string {
   if (cat.metric_kind === "amount") return "USD";
-  if (cat.metric_kind === "boolean") return "yes / no";
+  if (cat.metric_kind === "boolean") return "Did / Did not";
   return quantityUnitLabel(cat.unit) || cat.unit || "count";
 }
 
@@ -107,7 +107,7 @@ export function formatPartnerRitualValue(hint: SharedRitualHint): string {
   }
   if (hint.metric_kind === "boolean") {
     const yes = Number(hint.quantity) >= 1;
-    return `${name} said ${yes ? "yes" : "no"}${together}`;
+    return `${name} ${yes ? "did" : "did not"}${together}`;
   }
   const n = Number(hint.quantity);
   if (!Number.isFinite(n)) return `${name} already logged this${together}`;

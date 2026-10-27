@@ -11,12 +11,22 @@ export const ALL_FILTER = "all";
 
 const UNIT_ORDER = [
   "minutes",
+  "hours",
   "miles",
   "km",
+  "steps",
   "sessions",
   "reps",
-  "pages",
+  "lbs",
+  "oz",
+  "kg",
+  "grams",
+  "calories",
+  "servings",
+  "cups",
   "glasses",
+  "ml",
+  "pages",
   "count",
 ];
 
@@ -66,6 +76,8 @@ export function formatQtyCompact(n: number, unit: string): string {
   switch (unit) {
     case "minutes":
       return `${v}m`;
+    case "hours":
+      return `${v}h`;
     case "miles":
       return `${v}mi`;
     case "km":
@@ -75,9 +87,22 @@ export function formatQtyCompact(n: number, unit: string): string {
       return `${v}×`;
     case "reps":
       return `${v}`;
+    case "lbs":
+    case "pounds":
+      return `${v} lbs`;
+    case "oz":
+    case "ounces":
+      return `${v} oz`;
+    case "kg":
+    case "kilograms":
+      return `${v} kg`;
+    case "g":
+    case "grams":
+      return `${v} g`;
     default: {
       const label = quantityUnitLabel(unit);
-      return label ? `${v}${label}` : v;
+      if (!label) return v;
+      return label.length > 2 ? `${v} ${label}` : `${v}${label}`;
     }
   }
 }

@@ -394,12 +394,22 @@ def calendar_month(user, year: int, month: int, request=None) -> dict:
 
 _CHART_UNIT_ORDER = (
     "minutes",
+    "hours",
     "miles",
     "km",
+    "steps",
     "sessions",
     "reps",
-    "pages",
+    "lbs",
+    "oz",
+    "kg",
+    "grams",
+    "calories",
+    "servings",
+    "cups",
     "glasses",
+    "ml",
+    "pages",
     "count",
 )
 

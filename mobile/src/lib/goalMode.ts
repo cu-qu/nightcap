@@ -43,6 +43,11 @@ export function modeShortLabel(mode: GoalMode): string {
 }
 
 export function modePillLabel(goal: GroupGoalItem): string {
+  if (goal.category.metric_kind === "boolean") {
+    return goal.mode === "stay_under" || goal.direction === "max"
+      ? "Did not"
+      : "Did";
+  }
   if (goal.mode === "completed") {
     const n = formatGoalNumber(goal.target_value, "boolean");
     return `Done ${n}×`;

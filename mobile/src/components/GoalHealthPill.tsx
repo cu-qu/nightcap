@@ -41,7 +41,9 @@ export function GoalHealthPill({ goal, onPress }: Props) {
           {goal.scope === "shared" ? `${goal.display_name} · 💛` : goal.display_name}
         </Text>
         <Text style={styles.meta} numberOfLines={1}>
-          {modePillLabel(goal)} · {current}/{target}
+          {goal.category.metric_kind === "boolean"
+            ? modePillLabel(goal)
+            : `${modePillLabel(goal)} · ${current}/${target}`}
         </Text>
         <View style={styles.barTrack}>
           <View

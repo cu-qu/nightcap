@@ -23,7 +23,7 @@ import { sanitizeDecimalInput } from "@/src/utils/date";
 import {
   defaultIntentForMetricKind,
   directionForIntent,
-  intentForMode,
+  intentForGoal,
   nativeTargetInput,
   type GoalIntent,
 } from "@/src/utils/goalCopy";
@@ -75,15 +75,17 @@ export function SetGoalSheet({
   const [saving, setSaving] = useState(false);
   const [adding, setAdding] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [pinnedCategory, setPinnedCategory] = useState<Category | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useLayoutEffect(() => {
     if (!visible) return;
     setError(null);
     setAddOpen(false);
+    setPinnedCategory(null);
     if (existingGoal) {
       setPeriod(existingGoal.period);
-      setIntent(intentForMode(existingGoal.mode));
+      setIntent(intentForGoal(existingGoal));
       setCategoryUuid(existingGoal.category.uuid);
       setTarget(nativeTargetInput(existingGoal));
       setScope(existingGoal.scope === "shared" ? "shared" : "personal");
@@ -128,16 +130,31 @@ export function SetGoalSheet({
   }, [ritualGroups]);
 
   const visibleCategories = useMemo(() => {
-    if (groupFilter === ALL_GROUPS) return categories;
-    if (groupFilter === UNGROUPED) return ungrouped;
-    const group = ritualGroups.find(
-      (g) => g.key === groupFilter || g.uuid === groupFilter
-    );
-    return group?.categories ?? [];
-  }, [categories, groupFilter, ritualGroups, ungrouped]);
+    let list: Category[];
+    if (groupFilter === ALL_GROUPS) list = categories;
+    else if (groupFilter === UNGROUPED) list = ungrouped;
+    else {
+      const group = ritualGroups.find(
+        (g) => g.key === groupFilter || g.uuid === groupFilter
+      );
+      list = group?.categories ?? [];
+    }
+    if (
+      pinnedCategory &&
+      !list.some((c) => c.uuid === pinnedCategory.uuid) &&
+      (groupFilter === ALL_GROUPS ||
+        (groupFilter === UNGROUPED && pinnedCategory.group == null) ||
+        pinnedCategory.group_key === groupFilter ||
+        pinnedCategory.group_uuid === groupFilter)
+    ) {
+      return [pinnedCategory, ...list];
+    }
+    return list;
+  }, [categories, groupFilter, pinnedCategory, ritualGroups, ungrouped]);
 
   const selected =
     categories.find((c) => c.uuid === categoryUuid) ??
+    (pinnedCategory?.uuid === categoryUuid ? pinnedCategory : null) ??
     existingGoal?.category ??
     null;
 
@@ -161,19 +178,17 @@ export function SetGoalSheet({
     setIntent(defaultIntentForMetricKind(cat.metric_kind));
   }
 
-  const reachLabel =
-    selected?.metric_kind === "boolean" ? "Complete" : "Reach";
+  const booleanGoal = selected?.metric_kind === "boolean";
   const reachHint =
     selected?.metric_kind === "amount"
       ? "Hit a money target (donate, invest, save)"
-      : selected?.metric_kind === "boolean"
-        ? "Do it a number of times"
-        : "Hit a time, distance, or count target";
+      : "Hit a time, distance, or count target";
 
   async function onAddCategory(input: CategoryCreateInput) {
     setAdding(true);
     try {
       const created = await createCategory(input);
+      setPinnedCategory(created);
       setAddOpen(false);
       pickCategory(created);
       if (created.group_key) {
@@ -194,8 +209,17 @@ export function SetGoalSheet({
   }
 
   async function submit() {
-    if (!selected || !target.trim()) {
-      setError("Pick a category and target.");
+    const goalIntent: GoalIntent = booleanGoal
+      ? intent === "did_not"
+        ? "did_not"
+        : "did"
+      : intent === "stay_under"
+        ? "stay_under"
+        : "reach";
+    if (!selected || (!booleanGoal && !target.trim())) {
+      setError(
+        booleanGoal ? "Pick a category." : "Pick a category and target."
+      );
       return;
     }
     setSaving(true);
@@ -203,9 +227,9 @@ export function SetGoalSheet({
     try {
       await onSubmit({
         category_uuid: selected.uuid,
-        target_value: target.trim(),
+        target_value: booleanGoal ? "1" : target.trim(),
         period,
-        direction: directionForIntent(intent),
+        direction: directionForIntent(goalIntent),
         ...(canShare ? { scope } : {}),
       });
       onClose();
@@ -217,10 +241,21 @@ export function SetGoalSheet({
   }
 
   return (
-    <>
-      <Modal visible={visible} animationType="slide" transparent>
-        <View style={styles.backdrop}>
-          <View style={styles.sheet}>
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={styles.backdrop}>
+        <View style={styles.sheet}>
+          {addOpen ? (
+            <AddCategoryModal
+              embedded
+              visible
+              group={null}
+              groups={groups}
+              initialGroupId={addInitialGroupId}
+              loading={adding}
+              onClose={() => setAddOpen(false)}
+              onSubmit={onAddCategory}
+            />
+          ) : (
             <ScrollView
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
@@ -230,8 +265,10 @@ export function SetGoalSheet({
               </Text>
               <Text style={styles.hint}>
                 {editing
-                  ? "Change the target, period, or who this is for."
-                  : "Stay under a budget, or reach a target — like donating or investing."}
+                  ? booleanGoal
+                    ? "Change whether you did it, the period, or who this is for."
+                    : "Change the target, period, or who this is for."
+                  : "Stay under a budget, reach a target, or track did / did not."}
               </Text>
 
               <Text style={styles.label}>Period</Text>
@@ -256,41 +293,82 @@ export function SetGoalSheet({
               </View>
 
               <Text style={styles.label}>Goal type</Text>
-              <View style={styles.segment}>
-                <Pressable
-                  onPress={() => setIntent("stay_under")}
-                  style={[
-                    styles.segBtn,
-                    intent === "stay_under" && styles.segBtnOn,
-                  ]}
-                >
-                  <Text
+              {booleanGoal ? (
+                <View style={styles.segment}>
+                  <Pressable
+                    onPress={() => setIntent("did")}
+                    style={[styles.segBtn, intent === "did" && styles.segBtnOn]}
+                  >
+                    <Text
+                      style={[
+                        styles.segText,
+                        intent === "did" && styles.segTextOn,
+                      ]}
+                    >
+                      Did
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setIntent("did_not")}
                     style={[
-                      styles.segText,
-                      intent === "stay_under" && styles.segTextOn,
+                      styles.segBtn,
+                      intent === "did_not" && styles.segBtnOn,
                     ]}
                   >
-                    Stay under
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setIntent("reach")}
-                  style={[styles.segBtn, intent === "reach" && styles.segBtnOn]}
-                >
-                  <Text
+                    <Text
+                      style={[
+                        styles.segText,
+                        intent === "did_not" && styles.segTextOn,
+                      ]}
+                    >
+                      Did not
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.segment}>
+                  <Pressable
+                    onPress={() => setIntent("stay_under")}
                     style={[
-                      styles.segText,
-                      intent === "reach" && styles.segTextOn,
+                      styles.segBtn,
+                      intent === "stay_under" && styles.segBtnOn,
                     ]}
                   >
-                    {reachLabel}
-                  </Text>
-                </Pressable>
-              </View>
+                    <Text
+                      style={[
+                        styles.segText,
+                        intent === "stay_under" && styles.segTextOn,
+                      ]}
+                    >
+                      Stay under
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setIntent("reach")}
+                    style={[
+                      styles.segBtn,
+                      intent === "reach" && styles.segBtnOn,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.segText,
+                        intent === "reach" && styles.segTextOn,
+                      ]}
+                    >
+                      Reach
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
               <Text style={styles.modeHint}>
-                {intent === "stay_under"
-                  ? "Don’t go over this amount or count"
-                  : reachHint}
+                {booleanGoal
+                  ? intent === "did_not"
+                    ? "You did not do it during this period"
+                    : "You did it during this period"
+                  : intent === "stay_under"
+                    ? "Don’t go over this amount or count"
+                    : reachHint}
               </Text>
 
               {existingGoal ? (
@@ -375,24 +453,26 @@ export function SetGoalSheet({
                 </>
               )}
 
-              <Text style={styles.label}>
-                Target
-                {selected?.metric_kind === "amount"
-                  ? " ($)"
-                  : selected?.metric_kind === "boolean"
-                    ? " (times)"
-                    : selected?.unit
-                      ? ` (${selected.unit})`
-                      : ""}
-              </Text>
-              <TextInput
-                value={target}
-                onChangeText={(t) => setTarget(sanitizeDecimalInput(t))}
-                keyboardType="decimal-pad"
-                placeholder="0"
-                placeholderTextColor={colors.muted}
-                style={styles.input}
-              />
+              {booleanGoal ? null : (
+                <>
+                  <Text style={styles.label}>
+                    Target
+                    {selected?.metric_kind === "amount"
+                      ? " ($)"
+                      : selected?.unit
+                        ? ` (${selected.unit})`
+                        : ""}
+                  </Text>
+                  <TextInput
+                    value={target}
+                    onChangeText={(t) => setTarget(sanitizeDecimalInput(t))}
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                    placeholderTextColor={colors.muted}
+                    style={styles.input}
+                  />
+                </>
+              )}
 
               {canShare ? (
                 <>
@@ -455,20 +535,10 @@ export function SetGoalSheet({
                 </Pressable>
               </View>
             </ScrollView>
-          </View>
+          )}
         </View>
-      </Modal>
-
-      <AddCategoryModal
-        visible={addOpen && visible}
-        group={null}
-        groups={groups}
-        initialGroupId={addInitialGroupId}
-        loading={adding}
-        onClose={() => setAddOpen(false)}
-        onSubmit={onAddCategory}
-      />
-    </>
+      </View>
+    </Modal>
   );
 }
 

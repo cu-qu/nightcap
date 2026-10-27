@@ -133,8 +133,8 @@ export function CalendarDaySummary({
                             ? formatSpendDelta(amount)
                             : c.metric_kind === "boolean"
                               ? qty
-                                ? "Yes"
-                                : "No"
+                                ? "Did"
+                                : "Did not"
                               : formatQtyLong(qty, c.unit);
                         if (!line) return null;
                         return (

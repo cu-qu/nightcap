@@ -77,7 +77,7 @@ export function RitualCategoryStep({
                 value === true && styles.boolLabelOn,
               ]}
             >
-              Yes
+              Did
             </Text>
           </Pressable>
           <Pressable
@@ -90,7 +90,7 @@ export function RitualCategoryStep({
                 value === false && styles.boolLabelOn,
               ]}
             >
-              No
+              Did not
             </Text>
           </Pressable>
         </View>

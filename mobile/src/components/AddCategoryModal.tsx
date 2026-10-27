@@ -32,6 +32,8 @@ type Props = {
   /** Pre-select a group when `group` is null (picker mode). */
   initialGroupId?: number | null;
   loading?: boolean;
+  /** Render inside an existing sheet. A second modal will not appear on iOS. */
+  embedded?: boolean;
   onClose: () => void;
   onSubmit: (input: CategoryCreateInput) => Promise<void>;
 };
@@ -42,6 +44,7 @@ export function AddCategoryModal({
   groups = [],
   initialGroupId = null,
   loading,
+  embedded = false,
   onClose,
   onSubmit,
 }: Props) {
@@ -139,15 +142,8 @@ export function AddCategoryModal({
         ? "Spend"
         : activeGroup?.name ?? "a group";
 
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <View style={styles.backdrop}>
-        <View style={styles.card}>
+  const form = (
+    <>
           <Text style={styles.title}>Add category</Text>
           <Text style={styles.subtitle}>to {titleTarget}</Text>
 
@@ -263,7 +259,23 @@ export function AddCategoryModal({
           <Pressable onPress={onClose} style={styles.cancel} hitSlop={8}>
             <Text style={styles.cancelText}>Cancel</Text>
           </Pressable>
-        </View>
+    </>
+  );
+
+  if (embedded) {
+    if (!visible) return null;
+    return <View style={styles.embedded}>{form}</View>;
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.backdrop}>
+        <View style={styles.card}>{form}</View>
       </View>
     </Modal>
   );
@@ -274,6 +286,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "flex-end",
+  },
+  embedded: {
+    flexShrink: 1,
   },
   card: {
     maxHeight: "92%",

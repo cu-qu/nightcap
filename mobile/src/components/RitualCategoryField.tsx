@@ -80,7 +80,7 @@ export function RitualCategoryField({
                   value === true && styles.boolLabelOn,
                 ]}
               >
-                Yes
+                Did
               </Text>
             </Pressable>
             <Pressable
@@ -93,7 +93,7 @@ export function RitualCategoryField({
                   value === false && styles.boolLabelOn,
                 ]}
               >
-                No
+                Did not
               </Text>
             </Pressable>
           </View>
