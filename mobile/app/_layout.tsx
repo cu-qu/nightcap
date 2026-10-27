@@ -193,6 +193,7 @@ export default function RootLayout() {
           options={{
             headerShown: true,
             title: "NightCap",
+            headerBackButtonDisplayMode: "minimal",
             presentation: "card",
             animation: "fade",
             headerStyle: { backgroundColor: colors.surface },
@@ -203,6 +204,18 @@ export default function RootLayout() {
           name="ritual/follow-up"
           options={{
             headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="categories-groups"
+          options={{
+            headerShown: true,
+            title: "Categories & Groups",
+            headerBackButtonDisplayMode: "minimal",
+            animation: "slide_from_right",
+            headerStyle: { backgroundColor: colors.surface },
+            headerTintColor: colors.text,
+            headerShadowVisible: false,
           }}
         />
         <Stack.Screen

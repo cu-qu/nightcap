@@ -438,7 +438,7 @@ export default function SettingsScreen() {
 
         <Pressable
           style={styles.linkRow}
-          onPress={() => router.push("/(tabs)/categories-groups")}
+          onPress={() => router.push("/categories-groups")}
           hitSlop={6}
         >
           <View style={styles.flex}>

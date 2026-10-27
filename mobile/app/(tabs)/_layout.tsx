@@ -79,13 +79,6 @@ export default function TabsLayout() {
           tabBarIcon: ({ focused }) => <TabIcon label="⚙️" focused={focused} />,
         }}
       />
-      <Tabs.Screen
-        name="categories-groups"
-        options={{
-          href: null,
-          title: "Categories & Groups",
-        }}
-      />
     </Tabs>
   );
 }
