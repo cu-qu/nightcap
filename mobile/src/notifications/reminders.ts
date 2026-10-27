@@ -116,24 +116,28 @@ export async function scheduleNightlyReminder(
   minute: number
 ): Promise<boolean> {
   if (!nativeNotifications) return false;
-  const allowed = await requestReminderPermission();
-  if (!allowed) return false;
+  try {
+    const allowed = await requestReminderPermission();
+    if (!allowed) return false;
 
-  await cancelNightlyReminder();
-  await Notifications.scheduleNotificationAsync({
-    identifier: REMINDER_ID,
-    content: {
-      title: "Time for your NightCap 🌙",
-      body: "Close out the day — spend, habits, and a good note.",
-      data: { url: REMINDER_PATH },
-      sound: true,
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour,
-      minute,
-      channelId: REMINDER_CHANNEL_ID,
-    },
-  });
-  return true;
+    await cancelNightlyReminder();
+    await Notifications.scheduleNotificationAsync({
+      identifier: REMINDER_ID,
+      content: {
+        title: "Time for your NightCap 🌙",
+        body: "Close out the day — spend, habits, and a good note.",
+        data: { url: REMINDER_PATH },
+        sound: true,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour,
+        minute,
+        channelId: REMINDER_CHANNEL_ID,
+      },
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }

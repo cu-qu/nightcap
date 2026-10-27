@@ -159,9 +159,9 @@ class MembershipAdmin(admin.ModelAdmin):
 
 @admin.register(DevicePushToken)
 class DevicePushTokenAdmin(admin.ModelAdmin):
-    list_display = ("user", "platform", "updated_at")
+    list_display = ("user", "platform", "environment", "updated_at")
     search_fields = ("user__username", "token")
-    list_filter = ("platform",)
+    list_filter = ("platform", "environment")
 
 
 @admin.register(PartnerNudge)

@@ -84,12 +84,18 @@ function queueSchedule() {
     scheduleTimer = null;
     const { enabled, hour, minute } = useReminderStore.getState();
     if (!enabled) return;
-    void scheduleNightlyReminder(hour, minute).then((ok) => {
-      if (ok) return;
-      const prefs = { enabled: false, hour, minute };
-      useReminderStore.setState(prefs);
-      void writePrefs(prefs);
-    });
+    void scheduleNightlyReminder(hour, minute)
+      .then((ok) => {
+        if (ok) return;
+        const prefs = { enabled: false, hour, minute };
+        useReminderStore.setState(prefs);
+        void writePrefs(prefs);
+      })
+      .catch(() => {
+        const prefs = { enabled: false, hour, minute };
+        useReminderStore.setState(prefs);
+        void writePrefs(prefs);
+      });
   }, 400);
 }
 

@@ -1,21 +1,19 @@
 from __future__ import annotations
 
-import json
-import urllib.error
-import urllib.request
+import re
 from datetime import date
 
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from accounts.apns import send_apns
 from accounts.emails import PartnerNudgeEmail
 from accounts.models import DevicePushToken, PartnerNudge
 from accounts.partnerships import get_partner_user, get_user_partnership
 
-EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 MAX_NUDGE_AGE_DAYS = 14
 NUDGE_PATH = "/ritual/spend"
-NUDGE_CHANNEL_ID = "nightcap-nudges"
+IOS_TOKEN_RE = re.compile(r"^[0-9a-fA-F]{64,200}$")
 
 
 def user_has_logged_nightcap(user, day: date) -> bool:
@@ -32,10 +30,10 @@ def acknowledge_incoming_nudges(user, day: date) -> None:
     ).update(read_at=timezone.now())
 
 
-def register_push_token(user, token: str, platform: str = "") -> DevicePushToken:
-    token = (token or "").strip()
-    if len(token) < 16:
-        raise ValidationError({"detail": "That push token looks invalid."})
+def register_push_token(
+    user, token: str, platform: str = "", environment: str = ""
+) -> DevicePushToken:
+    token = re.sub(r"[<>\s]", "", token or "")
     platform = (platform or "").strip().lower()
     if platform not in {
         DevicePushToken.PLATFORM_IOS,
@@ -44,10 +42,18 @@ def register_push_token(user, token: str, platform: str = "") -> DevicePushToken
         "",
     }:
         platform = ""
+    environment = (environment or "").strip().lower()
+    if environment not in {DevicePushToken.ENV_SANDBOX, DevicePushToken.ENV_PRODUCTION}:
+        environment = ""
+    if platform == DevicePushToken.PLATFORM_IOS:
+        if not IOS_TOKEN_RE.fullmatch(token):
+            raise ValidationError({"detail": "That push token looks invalid."})
+    elif len(token) < 16:
+        raise ValidationError({"detail": "That push token looks invalid."})
     DevicePushToken.objects.filter(token=token).exclude(user=user).delete()
     record, _ = DevicePushToken.objects.update_or_create(
         token=token,
-        defaults={"user": user, "platform": platform},
+        defaults={"user": user, "platform": platform, "environment": environment},
     )
     return record
 
@@ -60,58 +66,8 @@ def _format_nudge_day(day: date) -> str:
     return day.strftime("%A, %B ") + str(day.day)
 
 
-def _expo_tickets_ok(payload: object) -> bool:
-    if not isinstance(payload, dict):
-        return False
-    tickets = payload.get("data")
-    if isinstance(tickets, dict):
-        tickets = [tickets]
-    if not isinstance(tickets, list):
-        return False
-    return any(
-        isinstance(ticket, dict) and ticket.get("status") == "ok" for ticket in tickets
-    )
-
-
-def _send_expo_push(tokens: list[str], *, title: str, body: str, data: dict) -> bool:
-    messages = [
-        {
-            "to": token,
-            "title": title,
-            "body": body,
-            "sound": "default",
-            "priority": "high",
-            "badge": 1,
-            "channelId": NUDGE_CHANNEL_ID,
-            "data": data,
-        }
-        for token in tokens
-        if token
-    ]
-    if not messages:
-        return False
-    request = urllib.request.Request(
-        EXPO_PUSH_URL,
-        data=json.dumps(messages).encode("utf-8"),
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=8) as response:
-            if not (200 <= response.status < 300):
-                return False
-            raw = response.read()
-            if not raw:
-                return True
-            try:
-                return _expo_tickets_ok(json.loads(raw.decode("utf-8")))
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                return True
-    except (OSError, urllib.error.URLError):
-        return False
+def _send_apns(records: list[DevicePushToken], *, title: str, body: str, data: dict) -> bool:
+    return send_apns(records, title=title, body=body, data=data)
 
 
 def serialize_nudge(nudge: PartnerNudge, *, already_sent: bool = False) -> dict:
@@ -157,13 +113,15 @@ def send_partner_nudge(user, day: date) -> dict:
     day_label = _format_nudge_day(day)
     title = f"{user.username} nudged you 🌙"
     body = f"Finish your NightCap for {day_label}."
-    tokens = list(
-        DevicePushToken.objects.filter(user=partner).values_list("token", flat=True)
+    records = list(
+        DevicePushToken.objects.filter(
+            user=partner, platform=DevicePushToken.PLATFORM_IOS
+        )
     )
     pushed = bool(
-        tokens
-        and _send_expo_push(
-            tokens,
+        records
+        and _send_apns(
+            records,
             title=title,
             body=body,
             data={

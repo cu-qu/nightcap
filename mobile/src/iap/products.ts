@@ -6,8 +6,8 @@ export const YEARLY_PRODUCT_ID = "com.nightcap.app.couple.yearly";
 export const ALL_PRODUCT_IDS = [MONTHLY_PRODUCT_ID, YEARLY_PRODUCT_ID];
 
 export const FALLBACK_PRICES = {
-  [MONTHLY_PRODUCT_ID]: "$2",
-  [YEARLY_PRODUCT_ID]: "$10",
+  [MONTHLY_PRODUCT_ID]: "$3",
+  [YEARLY_PRODUCT_ID]: "$15",
 } as const;
 
 function legalPageUrl(path: "privacy" | "terms" | "support"): string {

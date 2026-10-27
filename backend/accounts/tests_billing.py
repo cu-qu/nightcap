@@ -17,7 +17,7 @@ from accounts.partnerships import accept_invite_code, ensure_partnership
 def apple_jws(**overrides) -> str:
     expires = datetime.now(dt_timezone.utc) + timedelta(days=30)
     payload = {
-        "bundleId": "com.nightcap.app",
+        "bundleId": "com.dailynightcap.app",
         "productId": YEARLY_PRODUCT_ID,
         "originalTransactionId": "1000000001",
         "transactionId": "1000000002",
@@ -116,8 +116,8 @@ class BillingVerifyTests(TestCase):
         resp = self.client.get("/api/v1/billing/")
         self.assertEqual(resp.status_code, 200, resp.content)
         products = {item["id"]: item for item in resp.json()["products"]}
-        self.assertEqual(products[MONTHLY_PRODUCT_ID]["price"], "2.00")
-        self.assertEqual(products[YEARLY_PRODUCT_ID]["price"], "10.00")
+        self.assertEqual(products[MONTHLY_PRODUCT_ID]["price"], "3.00")
+        self.assertEqual(products[YEARLY_PRODUCT_ID]["price"], "15.00")
         self.assertEqual(products[MONTHLY_PRODUCT_ID]["trial_days"], 30)
 
     def test_verify_apple_yearly_entitles_couple(self):

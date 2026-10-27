@@ -169,6 +169,11 @@ class DevicePushTokenSerializer(serializers.Serializer):
         required=False,
         allow_blank=True,
     )
+    environment = serializers.ChoiceField(
+        choices=["sandbox", "production"],
+        required=False,
+        allow_blank=True,
+    )
 
 
 class BillingVerifySerializer(serializers.Serializer):

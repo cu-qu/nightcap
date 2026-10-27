@@ -260,7 +260,7 @@ class Membership(models.Model):
 
 
 class DevicePushToken(models.Model):
-    """Expo push token so we can deliver partner NightCap nudges."""
+    """Apple device token so we can deliver partner NightCap nudges."""
 
     PLATFORM_IOS = "ios"
     PLATFORM_ANDROID = "android"
@@ -270,10 +270,17 @@ class DevicePushToken(models.Model):
         (PLATFORM_ANDROID, "Android"),
         (PLATFORM_WEB, "Web"),
     ]
+    ENV_SANDBOX = "sandbox"
+    ENV_PRODUCTION = "production"
+    ENV_CHOICES = [
+        (ENV_SANDBOX, "Sandbox"),
+        (ENV_PRODUCTION, "Production"),
+    ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="push_tokens")
     token = models.CharField(max_length=255, unique=True)
     platform = models.CharField(max_length=16, choices=PLATFORM_CHOICES, blank=True)
+    environment = models.CharField(max_length=16, choices=ENV_CHOICES, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

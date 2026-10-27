@@ -59,6 +59,7 @@ export async function nudgePartner(date: string): Promise<{ nudge: PartnerNudge 
 export async function registerDevicePushToken(input: {
   token: string;
   platform?: string;
+  environment?: "sandbox" | "production";
 }): Promise<{ detail: string }> {
   return apiRequest("/api/v1/devices/push-token/", {
     method: "POST",

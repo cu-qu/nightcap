@@ -23,14 +23,14 @@ PRODUCTS = {
     MONTHLY_PRODUCT_ID: {
         "plan": Membership.PLAN_MONTHLY,
         "period_days": 31,
-        "display_price": "2.00",
+        "display_price": "3.00",
         "period": "month",
         "label": "NightCap for two · monthly",
     },
     YEARLY_PRODUCT_ID: {
         "plan": Membership.PLAN_YEARLY,
         "period_days": 366,
-        "display_price": "10.00",
+        "display_price": "15.00",
         "period": "year",
         "label": "NightCap for two · yearly",
     },
@@ -87,7 +87,7 @@ def _plan_for_product(product_id: str) -> dict:
 
 
 def _require_bundle(payload_bundle: str) -> None:
-    expected = getattr(settings, "IAP_APPLE_BUNDLE_ID", "com.nightcap.app")
+    expected = getattr(settings, "IAP_APPLE_BUNDLE_ID", "com.dailynightcap.app")
     if payload_bundle and payload_bundle != expected:
         raise ValidationError({"purchase_token": "This purchase is for a different app."})
 

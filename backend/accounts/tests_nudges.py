@@ -35,7 +35,7 @@ class PartnerNudgeTests(TestCase):
         self.partner_client.force_authenticate(user=self.partner)
         self.today = timezone.localdate()
 
-    @patch("accounts.nudges._send_expo_push", return_value=False)
+    @patch("accounts.nudges._send_apns", return_value=False)
     @patch("accounts.emails.PartnerNudgeEmail.send")
     def test_nudge_sends_email_and_records(self, mock_send, _mock_push):
         resp = self.client.post(
@@ -52,7 +52,7 @@ class PartnerNudgeTests(TestCase):
         mock_send.assert_called_once()
         self.assertEqual(PartnerNudge.objects.count(), 1)
 
-    @patch("accounts.nudges._send_expo_push", return_value=False)
+    @patch("accounts.nudges._send_apns", return_value=False)
     @patch("accounts.emails.PartnerNudgeEmail.send")
     def test_nudge_is_idempotent(self, mock_send, _mock_push):
         first = self.client.post(
@@ -110,13 +110,14 @@ class PartnerNudgeTests(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
 
-    @patch("accounts.nudges._send_expo_push", return_value=True)
+    @patch("accounts.nudges._send_apns", return_value=True)
     @patch("accounts.emails.PartnerNudgeEmail.send")
     def test_nudge_uses_push_token_when_registered(self, mock_send, mock_push):
         DevicePushToken.objects.create(
             user=self.partner,
-            token="ExponentPushToken[aaaaaaaaaaaaaaaa]",
+            token="ab" * 32,
             platform="ios",
+            environment="production",
         )
         resp = self.client.post(
             "/api/v1/partnership/nudge/",
@@ -138,7 +139,7 @@ class PartnerNudgeTests(TestCase):
             status=NightCap.STATUS_COMPLETED,
         )
         with patch("accounts.emails.PartnerNudgeEmail.send"), patch(
-            "accounts.nudges._send_expo_push", return_value=False
+            "accounts.nudges._send_apns", return_value=False
         ):
             self.client.post(
                 "/api/v1/partnership/nudge/",
@@ -171,7 +172,7 @@ class PartnerNudgeTests(TestCase):
 
     def test_completing_ritual_clears_incoming_nudge(self):
         with patch("accounts.emails.PartnerNudgeEmail.send"), patch(
-            "accounts.nudges._send_expo_push", return_value=False
+            "accounts.nudges._send_apns", return_value=False
         ):
             self.client.post(
                 "/api/v1/partnership/nudge/",
@@ -212,16 +213,15 @@ class PartnerNudgeTests(TestCase):
         self.assertTrue(owner_day["partner"]["has_nightcap"])
 
     def test_register_and_remove_push_token(self):
-        token = "ExponentPushToken[bbbbbbbbbbbbbbbb]"
+        token = "cd" * 32
         resp = self.client.post(
             "/api/v1/devices/push-token/",
-            {"token": token, "platform": "ios"},
+            {"token": token, "platform": "ios", "environment": "sandbox"},
             format="json",
         )
         self.assertEqual(resp.status_code, 200, resp.content)
-        self.assertTrue(
-            DevicePushToken.objects.filter(user=self.owner, token=token).exists()
-        )
+        saved = DevicePushToken.objects.get(user=self.owner, token=token)
+        self.assertEqual(saved.environment, "sandbox")
         moved = self.partner_client.post(
             "/api/v1/devices/push-token/",
             {"token": token, "platform": "ios"},
@@ -239,6 +239,14 @@ class PartnerNudgeTests(TestCase):
         )
         self.assertEqual(removed.status_code, 200, removed.content)
         self.assertFalse(DevicePushToken.objects.filter(token=token).exists())
+
+    def test_ios_rejects_expo_push_token(self):
+        resp = self.client.post(
+            "/api/v1/devices/push-token/",
+            {"token": "ExponentPushToken[bbbbbbbbbbbbbbbb]", "platform": "ios"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
 
     def test_solo_calendar_partner_is_null(self):
         solo = User.objects.create_user(

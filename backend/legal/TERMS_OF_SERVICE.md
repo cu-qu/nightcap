@@ -1,6 +1,6 @@
 # Terms of Service
 
-**Effective Date:** September 12, 2026
+**Effective Date:** October 22, 2026
 
 These terms govern the NightCap apps and API. By creating an account or using NightCap, you agree to them. If you do not agree, do not use the service.
 
@@ -16,8 +16,8 @@ Use NightCap lawfully. Do not upload illegal content, harass anyone, or attempt 
 
 NightCap is a paid auto-renewing subscription. One subscription covers both people in a couple space.
 
-- **Monthly:** $2.00 USD per month (`com.nightcap.app.couple.monthly`)
-- **Yearly:** $10.00 USD per year (`com.nightcap.app.couple.yearly`)
+- **Monthly:** $3.00 USD per month (`com.nightcap.app.couple.monthly`)
+- **Yearly:** $15.00 USD per year (`com.nightcap.app.couple.yearly`)
 - **Trial:** 30 days free when you create an account
 
 Payment is charged to your Apple ID or Google Play account at confirmation of purchase. Subscriptions renew automatically unless you turn off auto-renew at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage or cancel in your store account settings:

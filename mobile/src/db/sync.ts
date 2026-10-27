@@ -36,13 +36,14 @@ export async function enqueueRitual(
   const ritualId = await enqueueOutbox("ritual", payload);
   const draft = useRitualDraftStore.getState();
   const hasLocalPhoto = !!draft.favoritePhotoUri;
+  let photoId: number | null = null;
   if (draft.photoCleared && !hasLocalPhoto) {
-    await enqueueOutbox("nightcap_photo", {
+    photoId = await enqueueOutbox("nightcap_photo", {
       date: payload.date,
       clear: true,
     } satisfies NightCapPhotoOutboxPayload);
   } else if (hasLocalPhoto) {
-    await enqueueOutbox("nightcap_photo", {
+    photoId = await enqueueOutbox("nightcap_photo", {
       date: payload.date,
       localUri: draft.favoritePhotoUri,
       name: draft.favoritePhotoName || "moment.jpg",
@@ -60,9 +61,12 @@ export async function enqueueRitual(
   );
   const response = await flushOutbox();
   if (await isOnline()) {
-    const pending = await listPendingOutbox();
-    if (pending.some((row) => row.id === ritualId)) {
+    const pending = new Set((await listPendingOutbox()).map((row) => row.id));
+    if (pending.has(ritualId)) {
       throw new Error("Could not save NightCap.");
+    }
+    if (photoId != null && pending.has(photoId)) {
+      throw new Error("Could not save the photo.");
     }
   }
   return { queued: true, response };

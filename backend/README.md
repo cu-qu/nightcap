@@ -48,12 +48,12 @@ API docs are available at http://localhost:8000/api/docs/.
 - `POST /api/v1/auth/token/refresh/`
 - `GET/PATCH /api/v1/auth/me/`
 - `GET/PATCH /api/v1/auth/profile/`
-- `GET /api/v1/billing/` — couple membership + $2/mo and $10/yr products
+- `GET /api/v1/billing/` — couple membership + $3/mo and $15/yr products
 - `POST /api/v1/billing/verify/` — verify App Store / Play purchase
 - `GET/POST /api/v1/partnership/` — couple space + invite code
 - `POST /api/v1/partnership/invite/` / `join/` / `leave/`
 - `POST /api/v1/partnership/nudge/` — `{ date }` nudge your partner to NightCap that day
-- `POST/DELETE /api/v1/devices/push-token/` — Expo token for partner nudges
+- `POST/DELETE /api/v1/devices/push-token/` — APNs device token for partner nudges
 - `POST /api/v1/onboarding/setup/` — solo vs couple, templates, optional email invite
 - `GET/POST /api/v1/categories/` (includes stable `uuid` and optional `group`)
 - `GET/POST /api/v1/category-groups/` — configurable NightCap sections
@@ -91,7 +91,7 @@ date is enforced (ritual upserts use that uniqueness). Each day has at most one
 
 ## Subscriptions (IAP)
 
-NightCap for two is **$2 / month** or **$10 / year**, covering both partners. New accounts get a **30-day free trial**. After that the app shows a paywall.
+NightCap for two is **$3 / month** or **$15 / year**, covering both partners. New accounts get a **30-day free trial**. After that the app shows a paywall.
 
 Create auto-renewable subscriptions in App Store Connect and Google Play Console with these product IDs:
 
@@ -108,6 +108,19 @@ python manage.py grant_membership --username friend --revoke
 ```
 
 That grant is NightCap-side (no App Store charge). Apple does not let you push a subscription onto someone's Apple ID from the server.
+
+## Apple push (partner nudges)
+
+Nudges go straight to Apple Push Notification service. In the Apple Developer account, create a Key with Apple Push Notifications service enabled, then set:
+
+| Variable | Notes |
+|---|---|
+| `APNS_TEAM_ID` | Team ID from the membership page |
+| `APNS_KEY_ID` | Key ID of the `.p8` |
+| `APNS_AUTH_KEY` | PEM contents of the `.p8`, or a path to that file |
+| `APNS_BUNDLE_ID` | Optional. Defaults to `com.dailynightcap.app` |
+
+Debug builds register a sandbox token. TestFlight and App Store builds register a production token. If Apple push is not configured, or the partner has no iOS token, the nudge is emailed instead.
 
 To grant a **real App Store subscription** (free period / lifetime of a code), create **Subscription Offer Codes** in App Store Connect for `com.nightcap.app.couple.monthly` or `com.nightcap.app.couple.yearly`. The person redeems them in the app (**Redeem Apple offer code** on the paywall). StoreKit then reports a purchase and `/api/v1/billing/verify/` entitles the couple.
 

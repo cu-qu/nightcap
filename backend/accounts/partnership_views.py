@@ -175,6 +175,7 @@ class DevicePushTokenView(APIView):
             request.user,
             serializer.validated_data["token"],
             serializer.validated_data.get("platform") or "",
+            serializer.validated_data.get("environment") or "",
         )
         return Response({"detail": "Registered."})
 

@@ -22,7 +22,7 @@ class BillingView(APIView):
         summary="Membership and subscription products",
         description=(
             "Returns the caller's couple membership (trial, store, complimentary, or expired) "
-            "plus the $2/month and $10/year product catalog. One subscription covers both partners."
+            "plus the $3/month and $15/year product catalog. One subscription covers both partners."
         ),
     )
     def get(self, request):

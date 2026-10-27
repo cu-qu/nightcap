@@ -56,32 +56,39 @@ export function RitualMomentsSection({
   const hasPhoto = !!(localPhotoUri || hasRemotePhoto);
 
   async function launch(source: "library" | "camera") {
-    const permission =
-      source === "camera"
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert(
-        "Permission needed",
+    try {
+      const permission =
         source === "camera"
-          ? "Allow camera access to capture today’s photo."
-          : "Allow photo access to save a favorite still."
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          "Permission needed",
+          source === "camera"
+            ? "Allow camera access to capture today’s photo."
+            : "Allow photo access to save a favorite still."
+        );
+        return;
+      }
+
+      const result =
+        source === "camera"
+          ? await ImagePicker.launchCameraAsync(pickerOptions)
+          : await ImagePicker.launchImageLibraryAsync(pickerOptions);
+      if (result.canceled || !result.assets[0]) return;
+
+      const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > PHOTO_MAX_BYTES) {
+        Alert.alert("Photo too large", "Choose a photo under 8 MB.");
+        return;
+      }
+      onPickedPhoto(fileFromAsset(asset));
+    } catch {
+      Alert.alert(
+        "Could not open photos",
+        "Try again, or pick a different photo."
       );
-      return;
     }
-
-    const result =
-      source === "camera"
-        ? await ImagePicker.launchCameraAsync(pickerOptions)
-        : await ImagePicker.launchImageLibraryAsync(pickerOptions);
-    if (result.canceled || !result.assets[0]) return;
-
-    const asset = result.assets[0];
-    if (asset.fileSize && asset.fileSize > PHOTO_MAX_BYTES) {
-      Alert.alert("Photo too large", "Choose a photo under 8 MB.");
-      return;
-    }
-    onPickedPhoto(fileFromAsset(asset));
   }
 
   function onPressPhoto() {

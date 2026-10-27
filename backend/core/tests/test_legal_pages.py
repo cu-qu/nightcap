@@ -21,7 +21,7 @@ class LegalPagesTests(TestCase):
     def test_terms_include_auto_renew_language(self):
         resp = self.client.get("/terms/")
         self.assertContains(resp, "24 hours")
-        self.assertContains(resp, "$2.00")
+        self.assertContains(resp, "$3.00")
         self.assertContains(resp, "Restore purchases")
 
     def test_root_lists_legal_urls(self):

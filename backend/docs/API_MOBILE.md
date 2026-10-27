@@ -15,7 +15,7 @@ All mobile endpoints live under `/api/v1/` and require `Authorization: Bearer <a
 
 ## Billing (couple membership)
 
-One subscription covers both people in a couple space. New accounts get a **30-day free trial**. After that, subscribe through the App Store / Play Store ($2 / month or $10 / year). Staff can grant complimentary access in Django admin (`Grant complimentary membership`) or:
+One subscription covers both people in a couple space. New accounts get a **30-day free trial**. After that, subscribe through the App Store / Play Store ($3 / month or $15 / year). Staff can grant complimentary access in Django admin (`Grant complimentary membership`) or:
 
 ```bash
 python manage.py grant_membership --email friend@example.com --note "beta"
@@ -37,8 +37,8 @@ NightCap is couple habit tracking with personal goals.
 - `POST /api/v1/partnership/invite/` — `{ email? }` share code; emails if provided
 - `POST /api/v1/partnership/join/` — `{ invite_code }` copies shared goals onto the joining account
 - `POST /api/v1/partnership/leave/` — unlink; together goals become personal; remaining partner keeps a new invite code
-- `POST /api/v1/partnership/nudge/` — `{ date }` ask your partner to finish that day’s NightCap. Sends an iOS/Android push notification when they have a registered device token; emails if push is unavailable. One nudge per date.
-- `POST /api/v1/devices/push-token/` — `{ token, platform? }` register an Expo push token for partner nudges; `DELETE` with `{ token }` to remove it
+- `POST /api/v1/partnership/nudge/` — `{ date }` ask your partner to finish that day’s NightCap. Sends an Apple push notification when they have a registered iOS device token; emails if push is unavailable. One nudge per date.
+- `POST /api/v1/devices/push-token/` — `{ token, platform?, environment? }` register an APNs device token (`environment` is `sandbox` or `production`); `DELETE` with `{ token }` to remove it
 - `GET /api/v1/onboarding/templates/?mode=solo|couple` — spend / workout / habit starters (`Together` vs `Just me` via `suggested_scope`)
 - `POST /api/v1/onboarding/setup/` — `{ mode, templates: [{ slug, scope?, target_value? }], invite_email? }` creates the couple space if needed, applies goals, marks onboarding complete
 

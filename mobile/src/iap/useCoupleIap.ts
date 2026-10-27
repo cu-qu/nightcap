@@ -24,8 +24,12 @@ type CoupleIap = {
   manage: () => Promise<void>;
 };
 
-function accountToken(user: User | null | undefined): string {
-  return user?.partnership?.uuid || String(user?.id || "");
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function accountToken(user: User | null | undefined): string | undefined {
+  const candidate = user?.partnership?.uuid || (user?.id != null ? String(user.id) : "");
+  return UUID_RE.test(candidate) ? candidate : undefined;
 }
 
 function offerTokenOf(entry: { offerTokenAndroid?: string | null } | null | undefined): string {
@@ -78,33 +82,24 @@ export function useCoupleIap(options: {
     let removeError: undefined | (() => void);
 
     void (async () => {
+      let iap: typeof import("expo-iap") | null = null;
+      let connected = false;
       try {
-        const iap = await import("expo-iap");
+        iap = await import("expo-iap");
         if (cancelled) return;
-        iapRef.current = iap;
         await iap.initConnection();
-        const subscriptions = await iap.fetchProducts({
-          skus: ALL_PRODUCT_IDS,
-          type: "subs",
-        });
-        if (cancelled) return;
-        const next: Record<string, StorePrice> = {};
-        const list = Array.isArray(subscriptions) ? subscriptions : [];
-        for (const item of list) {
-          const offers = "subscriptionOffers" in item ? item.subscriptionOffers : null;
-          const offer = offers?.find((entry) => offerTokenOf(entry));
-          next[item.id] = {
-            id: item.id,
-            displayPrice: item.displayPrice,
-            offerTokenAndroid: offerTokenOf(offer) || undefined,
-          };
+        connected = true;
+        if (cancelled) {
+          void iap.endConnection();
+          return;
         }
-        setPrices(next);
-        const purchaseSub = iap.purchaseUpdatedListener(async (purchase) => {
+        const store = iap;
+
+        const purchaseSub = store.purchaseUpdatedListener(async (purchase) => {
           try {
             const ok = await verifyPurchase(purchase);
             if (ok) {
-              await iap.finishTransaction({ purchase, isConsumable: false });
+              await store.finishTransaction({ purchase, isConsumable: false });
             }
           } catch (e) {
             onErrorRef.current?.(
@@ -114,7 +109,7 @@ export function useCoupleIap(options: {
             setBusy(false);
           }
         });
-        const errorSub = iap.purchaseErrorListener((error) => {
+        const errorSub = store.purchaseErrorListener((error) => {
           setBusy(false);
           const cancelledPurchase =
             error?.code === "user-cancelled" ||
@@ -128,11 +123,34 @@ export function useCoupleIap(options: {
             : () => purchaseSub?.remove?.();
         removeError =
           typeof errorSub === "function" ? errorSub : () => errorSub?.remove?.();
-        setReady(true);
-      } catch {
-        if (!cancelled) {
-          setReady(false);
+        iapRef.current = store;
+        if (!cancelled) setReady(true);
+
+        try {
+          const subscriptions = await store.fetchProducts({
+            skus: ALL_PRODUCT_IDS,
+            type: "subs",
+          });
+          if (cancelled) return;
+          const next: Record<string, StorePrice> = {};
+          const list = Array.isArray(subscriptions) ? subscriptions : [];
+          for (const item of list) {
+            const offers = "subscriptionOffers" in item ? item.subscriptionOffers : null;
+            const offer = offers?.find((entry) => offerTokenOf(entry));
+            next[item.id] = {
+              id: item.id,
+              displayPrice: item.displayPrice,
+              offerTokenAndroid: offerTokenOf(offer) || undefined,
+            };
+          }
+          setPrices(next);
+        } catch {
+          if (!cancelled) setPrices({});
         }
+      } catch {
+        iapRef.current = null;
+        if (!cancelled) setReady(false);
+        if (connected && iap) void iap.endConnection();
       }
     })();
 
@@ -141,6 +159,7 @@ export function useCoupleIap(options: {
       removePurchase?.();
       removeError?.();
       const iap = iapRef.current;
+      iapRef.current = null;
       if (iap) void iap.endConnection();
     };
   }, [verifyPurchase]);
@@ -166,10 +185,13 @@ export function useCoupleIap(options: {
       await iap.requestPurchase({
         type: "subs",
         request: {
-          apple: { sku: productId, appAccountToken: token },
+          apple: {
+            sku: productId,
+            ...(token ? { appAccountToken: token } : {}),
+          },
           google: {
             skus: [productId],
-            obfuscatedAccountId: token.slice(0, 64),
+            ...(token ? { obfuscatedAccountId: token.slice(0, 64) } : {}),
             ...(price?.offerTokenAndroid
               ? { subscriptionOffers: [{ sku: productId, offerToken: price.offerTokenAndroid }] }
               : {}),

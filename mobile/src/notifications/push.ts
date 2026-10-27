@@ -1,5 +1,4 @@
 import { Platform } from "react-native";
-import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 
 import { registerDevicePushToken } from "@/src/api/partnership";
@@ -8,17 +7,12 @@ import {
   requestNotificationPermission,
 } from "@/src/notifications/reminders";
 
-function expoProjectId(): string | undefined {
-  const fromEas = Constants.easConfig?.projectId;
-  const fromExtra = Constants.expoConfig?.extra?.eas?.projectId;
-  const id = (fromEas || fromExtra || "").trim();
-  return id || undefined;
-}
+const APNS_TOKEN = /^[0-9a-fA-F]{64,200}$/;
 
 export async function registerPushTokenIfPossible(options?: {
   prompt?: boolean;
 }): Promise<boolean> {
-  if (Platform.OS !== "ios" && Platform.OS !== "android") return false;
+  if (Platform.OS !== "ios") return false;
 
   const allowed = options?.prompt
     ? await requestNotificationPermission()
@@ -26,15 +20,13 @@ export async function registerPushTokenIfPossible(options?: {
   if (!allowed) return false;
 
   try {
-    const projectId = expoProjectId();
-    const tokenResponse = projectId
-      ? await Notifications.getExpoPushTokenAsync({ projectId })
-      : await Notifications.getExpoPushTokenAsync();
-    const token = tokenResponse.data;
-    if (!token) return false;
+    const tokenResponse = await Notifications.getDevicePushTokenAsync();
+    const token = String(tokenResponse.data ?? "").replace(/[<>\s]/g, "");
+    if (!APNS_TOKEN.test(token)) return false;
     await registerDevicePushToken({
       token,
-      platform: Platform.OS,
+      platform: "ios",
+      environment: __DEV__ ? "sandbox" : "production",
     });
     return true;
   } catch {

@@ -62,7 +62,7 @@ function isLinked(partnership: Partnership | null | undefined, username?: string
 }
 
 const STEP_COPY: Record<
-  Exclude<Step, "mode" | "invite" | "remind">,
+  Extract<Step, GoalTemplateGroup>,
   { title: string; body: string }
 > = {
   finance: {
@@ -430,7 +430,11 @@ export default function OnboardingScreen() {
   async function finish(withReminder: boolean) {
     setError(null);
     if (withReminder) {
-      await enableReminders();
+      try {
+        await enableReminders();
+      } catch {
+        // A reminder failure must not abandon the rest of setup.
+      }
     }
     setLoading(true);
     try {

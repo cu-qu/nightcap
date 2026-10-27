@@ -35,6 +35,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.locale.LocaleMiddleware",
@@ -298,7 +299,11 @@ REST API for the NightCap iOS habit and budget tracker.
 SUPPORTED_LANGUAGES = ["en", "es"]
 
 IAP_TRIAL_DAYS = int(os.environ.get("IAP_TRIAL_DAYS", 30))
-IAP_APPLE_BUNDLE_ID = os.environ.get("IAP_APPLE_BUNDLE_ID", "com.nightcap.app")
+IAP_APPLE_BUNDLE_ID = os.environ.get("IAP_APPLE_BUNDLE_ID", "com.dailynightcap.app")
+APNS_TEAM_ID = os.environ.get("APNS_TEAM_ID", "")
+APNS_KEY_ID = os.environ.get("APNS_KEY_ID", "")
+APNS_AUTH_KEY = os.environ.get("APNS_AUTH_KEY", "")
+APNS_BUNDLE_ID = os.environ.get("APNS_BUNDLE_ID", IAP_APPLE_BUNDLE_ID)
 IAP_GOOGLE_PACKAGE_NAME = os.environ.get("IAP_GOOGLE_PACKAGE_NAME", "com.nightcap.app")
 IAP_APPLE_VERIFY_SIGNATURE = os.environ.get("IAP_APPLE_VERIFY_SIGNATURE", "true").lower() in (
     "true",
