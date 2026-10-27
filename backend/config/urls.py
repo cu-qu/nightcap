@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from accounts.pages import PasswordResetPage, VerifyEmailPage
 from core.legal import PrivacyPolicyView, SupportView, TermsOfServiceView
 from core.views import HealthCheckView
 
@@ -29,6 +30,8 @@ urlpatterns = [
     path("privacy/", PrivacyPolicyView.as_view(), name="privacy"),
     path("terms/", TermsOfServiceView.as_view(), name="terms"),
     path("support/", SupportView.as_view(), name="support"),
+    path("verify-email/", VerifyEmailPage.as_view(), name="verify-email-page"),
+    path("reset-password/", PasswordResetPage.as_view(), name="reset-password-page"),
     path("admin/", admin.site.urls),
     path("api/auth/", include("accounts.urls")),
     path("api/v1/auth/", include("accounts.urls")),

@@ -1,9 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -13,10 +11,12 @@ import {
   View,
 } from "react-native";
 
+import { requestPasswordReset } from "@/src/api/auth";
+import { ApiError } from "@/src/api/client";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { colors } from "@/src/theme/colors";
 
-const SUPPORT_EMAIL = "night_cap_app@proton.me";
+const FROM_ADDRESS = "nightcap@cuqulabs.com";
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
@@ -25,27 +25,31 @@ export default function ForgotPasswordScreen() {
     ? params.username[0] ?? ""
     : params.username ?? "";
   const [username, setUsername] = useState(initialUsername);
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  async function openMail() {
-    const subject = "NightCap password reset";
-    const body = [
-      "Hi,",
-      "",
-      "I forgot my NightCap password.",
-      username.trim() ? `Username: ${username.trim()}` : "Username: ",
-      "",
-      "Thanks.",
-    ].join("\n");
-    const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  async function onSubmit() {
+    setError(null);
+    setLoading(true);
     try {
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert(
-        "Email us",
-        `Send a note to ${SUPPORT_EMAIL} with your username and we’ll reset your password.`
+      const trimmedEmail = email.trim();
+      const trimmedUsername = username.trim();
+      await requestPasswordReset(
+        trimmedEmail
+          ? { email: trimmedEmail }
+          : { username: trimmedUsername }
       );
+      setSent(true);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not send the reset email");
+    } finally {
+      setLoading(false);
     }
   }
+
+  const canSend = Boolean(email.trim() || username.trim());
 
   return (
     <Screen>
@@ -59,11 +63,22 @@ export default function ForgotPasswordScreen() {
         >
           <Text style={styles.brand}>Forgot password</Text>
           <Text style={styles.subtitle}>
-            Email us from the address on your account, include your username, and
-            we’ll reset it for you.
+            We’ll email a reset link from {FROM_ADDRESS}.
           </Text>
 
-          <Text style={styles.label}>Username (optional)</Text>
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@example.com"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+          />
+
+          <Text style={styles.label}>Username</Text>
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
@@ -74,12 +89,19 @@ export default function ForgotPasswordScreen() {
             style={styles.input}
           />
 
-          <Text style={styles.label}>Send to</Text>
-          <Text selectable style={styles.email}>
-            {SUPPORT_EMAIL}
-          </Text>
+          {sent ? (
+            <Text style={styles.sent}>
+              If that account exists, a reset link is on its way from {FROM_ADDRESS}.
+            </Text>
+          ) : null}
+          {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <PrimaryButton title="Open email" onPress={() => void openMail()} />
+          <PrimaryButton
+            title="Send reset link"
+            onPress={() => void onSubmit()}
+            loading={loading}
+            disabled={!canSend || sent}
+          />
 
           <View style={styles.footer}>
             <Text style={styles.footerMuted}>Remembered it? </Text>
@@ -128,11 +150,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
-  email: {
-    marginBottom: 24,
-    fontSize: 16,
-    fontWeight: "600",
+  sent: {
+    marginBottom: 16,
+    fontSize: 15,
     color: colors.text,
+  },
+  error: {
+    marginBottom: 16,
+    fontSize: 15,
+    color: colors.danger,
   },
   footer: {
     marginTop: 24,

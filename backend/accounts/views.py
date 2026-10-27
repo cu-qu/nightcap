@@ -1,7 +1,4 @@
 from django.contrib.auth import get_user_model
-from django.contrib.auth.tokens import default_token_generator
-from django.utils.encoding import force_str
-from django.utils.http import urlsafe_base64_decode
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -20,7 +17,13 @@ from .serializers import (
     UserProfileSerializer,
     UserSerializer,
 )
-from .services import send_password_reset_email, send_verification_email
+from .services import (
+    PasswordResetError,
+    confirm_password_reset,
+    send_password_reset_email,
+    send_verification_email,
+    verify_email_token,
+)
 
 User = get_user_model()
 
@@ -124,10 +127,7 @@ class VerifyEmailView(APIView):
                 {"detail": "Missing token.", "token": ["This field is required."]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        updated = User.objects.filter(
-            email_verification_token=token, email_verified=False
-        ).update(email_verified=True, email_verification_token="")
-        if updated:
+        if verify_email_token(token):
             return Response({"detail": "Email verified.", "email_verified": True})
         return Response(
             {"detail": "Invalid or expired verification token."},
@@ -163,8 +163,8 @@ class ResendVerificationEmailView(APIView):
     tags=["Auth"],
     summary="Request password reset",
     description=(
-        "Sends a password-reset email if an account exists for the given address. "
-        "Always returns the same success message (no email enumeration)."
+        "Sends a password-reset email if an account exists for the given email or username. "
+        "Always returns the same success message (no account enumeration)."
     ),
     request=PasswordResetRequestSerializer,
     responses={200: MessageSerializer},
@@ -175,13 +175,17 @@ class PasswordResetRequestView(APIView):
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data["email"].strip()
-        user = User.objects.filter(email__iexact=email, is_active=True).first()
+        email = serializer.validated_data.get("email") or ""
+        username = serializer.validated_data.get("username") or ""
+        if email:
+            user = User.objects.filter(email__iexact=email, is_active=True).first()
+        else:
+            user = User.objects.filter(username__iexact=username, is_active=True).first()
         if user is not None:
             send_password_reset_email(user)
         return Response(
             {
-                "detail": "If an account exists for that email, you will receive reset instructions.",
+                "detail": "If an account exists for that email or username, you will receive reset instructions.",
             },
             status=status.HTTP_200_OK,
         )
@@ -203,24 +207,17 @@ class PasswordResetConfirmView(APIView):
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        uid_b64 = serializer.validated_data["uid"]
-        token = serializer.validated_data["token"]
-        new_password = serializer.validated_data["new_password"]
         try:
-            uid = force_str(urlsafe_base64_decode(uid_b64))
-            user = User.objects.get(pk=uid, is_active=True)
-        except (User.DoesNotExist, ValueError, TypeError, OverflowError):
+            confirm_password_reset(
+                uid=serializer.validated_data["uid"],
+                token=serializer.validated_data["token"],
+                new_password=serializer.validated_data["new_password"],
+            )
+        except PasswordResetError as exc:
             return Response(
-                {"detail": "Invalid or expired reset link."},
+                {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if not default_token_generator.check_token(user, token):
-            return Response(
-                {"detail": "Invalid or expired reset link."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        user.set_password(new_password)
-        user.save(update_fields=["password"])
         return Response(
             {"detail": "Password has been reset. You can sign in with your new password."},
             status=status.HTTP_200_OK,

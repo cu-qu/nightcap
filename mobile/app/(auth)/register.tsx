@@ -60,6 +60,7 @@ export default function RegisterScreen() {
           <Text style={styles.brand}>Join NightCap</Text>
           <Text style={styles.subtitle}>
             Couple habit tracking. Invite your partner in the next step — or paste a code now.
+            We’ll send a confirmation from nightcap@cuqulabs.com.
           </Text>
 
           <Text style={styles.label}>Username</Text>

@@ -29,6 +29,17 @@ export async function fetchMe(): Promise<User> {
   return apiRequest<User>("/api/v1/auth/me/");
 }
 
+export async function requestPasswordReset(input: {
+  email?: string;
+  username?: string;
+}): Promise<void> {
+  await apiRequest<unknown>("/api/v1/auth/password-reset/", {
+    method: "POST",
+    body: input,
+    auth: false,
+  });
+}
+
 export async function deleteAccount(): Promise<void> {
   await apiRequest<unknown>("/api/v1/auth/account/", {
     method: "DELETE",

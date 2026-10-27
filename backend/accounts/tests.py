@@ -1,12 +1,13 @@
 from unittest.mock import patch
 
 from django.contrib.auth.tokens import default_token_generator
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from rest_framework.test import APIClient
 
 from accounts.models import User
+from categories.defaults import DEFAULT_CATEGORIES
 from categories.models import TrackingCategory
 
 
@@ -44,7 +45,10 @@ class RegistrationVerificationEmailTests(TestCase):
         mock_send.assert_called_once()
         user = User.objects.get(username="newuser")
         self.assertFalse(user.email_verified)
-        self.assertEqual(TrackingCategory.objects.filter(user=user).count(), 15)
+        self.assertEqual(
+            TrackingCategory.objects.filter(user=user).count(),
+            len(DEFAULT_CATEGORIES),
+        )
 
 
 class VerifyEmailApiTests(TestCase):
@@ -114,6 +118,12 @@ class PasswordResetApiTests(TestCase):
         mock_send.assert_called_once()
 
     @patch("accounts.views.send_password_reset_email")
+    def test_password_reset_request_sends_when_username_exists(self, mock_send):
+        resp = self.client.post("/api/auth/password-reset/", {"username": "pwuser"})
+        self.assertEqual(resp.status_code, 200)
+        mock_send.assert_called_once()
+
+    @patch("accounts.views.send_password_reset_email")
     def test_password_reset_request_same_response_when_unknown_email(self, mock_send):
         resp = self.client.post(
             "/api/auth/password-reset/",
@@ -140,6 +150,37 @@ class PasswordResetApiTests(TestCase):
             {"uid": uid, "token": "invalid-token", "new_password": "new-strong-pass-99"},
         )
         self.assertEqual(resp.status_code, 400)
+
+
+class EmailLinkPageTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            username="linkuser",
+            email="link@example.com",
+            password="oldpass123",
+        )
+
+    def test_verify_page_confirms_email(self):
+        self.user.regenerate_email_verification_token()
+        token = self.user.email_verification_token
+        resp = self.client.get(f"/verify-email/?token={token}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Email confirmed")
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.email_verified)
+
+    def test_reset_page_sets_password(self):
+        uid = urlsafe_base64_encode(force_bytes(str(self.user.pk)))
+        token = default_token_generator.make_token(self.user)
+        resp = self.client.post(
+            "/reset-password/",
+            {"uid": uid, "token": token, "new_password": "new-strong-pass-99"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Password updated")
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("new-strong-pass-99"))
 
 
 @override_settings(

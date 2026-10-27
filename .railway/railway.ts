@@ -28,6 +28,7 @@ export default defineRailway(() => {
     CELERY_RESULT_BACKEND: cache.env.REDIS_URL,
     DJANGO_SETTINGS_MODULE: "config.settings.production",
     ALLOWED_HOSTS: ".up.railway.app",
+    DEFAULT_FROM_EMAIL: "NightCap <nightcap@cuqulabs.com>",
   };
 
   const api = service("nightcap api", {

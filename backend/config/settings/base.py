@@ -170,7 +170,18 @@ SIMPLE_JWT = {
     ),
 }
 
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+def _public_app_url() -> str:
+    """Origin used in verification and password-reset links."""
+    explicit = os.environ.get("FRONTEND_URL", "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    railway_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    if railway_domain:
+        return f"https://{railway_domain}".rstrip("/")
+    return "http://localhost:8000"
+
+
+FRONTEND_URL = _public_app_url()
 
 _resend_key = os.environ.get("RESEND_API_KEY", "").strip()
 if os.environ.get("EMAIL_BACKEND", "").strip():
@@ -185,7 +196,7 @@ ANYMAIL = {
 }
 
 DEFAULT_FROM_EMAIL = os.environ.get(
-    "DEFAULT_FROM_EMAIL", "NightCap <hello@nightcap.app>"
+    "DEFAULT_FROM_EMAIL", "NightCap <nightcap@cuqulabs.com>"
 )
 SERVER_EMAIL = os.environ.get("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
 EMAIL_USE_ANYMAIL_TAGS = os.environ.get("EMAIL_USE_ANYMAIL_TAGS", "True").lower() in (
@@ -194,13 +205,13 @@ EMAIL_USE_ANYMAIL_TAGS = os.environ.get("EMAIL_USE_ANYMAIL_TAGS", "True").lower(
     "yes",
 )
 EMAIL_VERIFICATION_FRONTEND_PATH = os.environ.get(
-    "EMAIL_VERIFICATION_FRONTEND_PATH", "/verify-email"
+    "EMAIL_VERIFICATION_FRONTEND_PATH", "/verify-email/"
 )
 EMAIL_VERIFICATION_SUBJECT = os.environ.get(
     "EMAIL_VERIFICATION_SUBJECT", "NightCap: Confirm your Email Address"
 )
 PASSWORD_RESET_FRONTEND_PATH = os.environ.get(
-    "PASSWORD_RESET_FRONTEND_PATH", "/reset-password"
+    "PASSWORD_RESET_FRONTEND_PATH", "/reset-password/"
 )
 EMAIL_PASSWORD_RESET_SUBJECT = os.environ.get(
     "EMAIL_PASSWORD_RESET_SUBJECT", "Reset your Password"
