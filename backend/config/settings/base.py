@@ -213,13 +213,13 @@ EMAIL_VERIFICATION_FRONTEND_PATH = os.environ.get(
     "EMAIL_VERIFICATION_FRONTEND_PATH", "/verify-email/"
 )
 EMAIL_VERIFICATION_SUBJECT = os.environ.get(
-    "EMAIL_VERIFICATION_SUBJECT", "NightCap: Confirm your Email Address"
+    "EMAIL_VERIFICATION_SUBJECT", "Confirm your NightCap email"
 )
 PASSWORD_RESET_FRONTEND_PATH = os.environ.get(
     "PASSWORD_RESET_FRONTEND_PATH", "/reset-password/"
 )
 EMAIL_PASSWORD_RESET_SUBJECT = os.environ.get(
-    "EMAIL_PASSWORD_RESET_SUBJECT", "Reset your Password"
+    "EMAIL_PASSWORD_RESET_SUBJECT", "Reset your NightCap password"
 )
 
 CORS_ALLOWED_ORIGINS = os.environ.get(

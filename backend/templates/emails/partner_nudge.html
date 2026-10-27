@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Your partner nudged you to NightCap</title>
-  </head>
-  <body>
-    <p>{{ from_username }} nudged you to NightCap for {{ day_label }}.</p>
-    <p>Open NightCap and close out the day — spend, habits, and a good note.</p>
-  </body>
-</html>
+{% extends "emails/base.html" %}
+
+{% block title %}Your partner nudged you{% endblock %}
+{% block preheader %}{{ from_username }} nudged you to finish NightCap for {{ day_label }}.{% endblock %}
+{% block headline %}Time to close the day{% endblock %}
+{% block content %}{{ from_username }} nudged you to finish NightCap for {{ day_label }}. Open the app and log spend, habits, and a note.{% endblock %}
+{% block note %}Your partner sent this because the day is still open.{% endblock %}

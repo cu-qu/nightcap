@@ -1,3 +1,5 @@
-{{ from_username }} nudged you to NightCap for {{ day_label }}.
+{{ from_username }} nudged you to finish NightCap for {{ day_label }}.
 
-Open NightCap and close out the day — spend, habits, and a good note.
+Open the app and log spend, habits, and a note.
+
+The NightCap team

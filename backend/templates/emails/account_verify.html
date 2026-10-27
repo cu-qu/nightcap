@@ -1,16 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Confirm your NightCap email</title>
-  </head>
-  <body>
-    <p>Hi {{ username }},</p>
-    <p>Thanks for joining NightCap. Verify your email to finish setting up your account.</p>
-    <p><a href="{{ verify_url }}">Verify my email</a></p>
-    <p>If the button does not work, copy and paste this link into your browser:</p>
-    <p>{{ verify_url }}</p>
-    <p>If you did not create an account, you can ignore this message.</p>
-    <p>The NightCap team</p>
-  </body>
-</html>
+{% extends "emails/base.html" %}
+
+{% block title %}Confirm your NightCap email{% endblock %}
+{% block preheader %}Confirm your address and NightCap will unlock.{% endblock %}
+{% block headline %}Confirm your email{% endblock %}
+{% block content %}Hi {{ username }}, thanks for joining. Confirm this address and NightCap will unlock.{% endblock %}
+{% block extra %}
+<tr>
+  <td style="padding:28px 32px 8px;">
+    {% include "emails/button.html" with href=verify_url label="Verify my email" %}
+  </td>
+</tr>
+{% endblock %}
+{% block note %}If you didn’t create a NightCap account, you can ignore this email.{% endblock %}

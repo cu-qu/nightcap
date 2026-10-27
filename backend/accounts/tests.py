@@ -203,8 +203,12 @@ class TransactionalMailTests(TestCase):
 
         VerifyAccountEmail(user, "tokensecret").send()
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("tokensecret", mail.outbox[0].body)
-        self.assertTrue(any("tokensecret" in alt for alt, _ in mail.outbox[0].alternatives))
+        self.assertNotIn("tokensecret", mail.outbox[0].body)
+        self.assertNotIn("http", mail.outbox[0].body)
+        html = next(alt for alt, mime in mail.outbox[0].alternatives if mime == "text/html")
+        self.assertEqual(html.count("tokensecret"), 1)
+        self.assertIn("Verify my email", html)
+        self.assertNotIn("copy and paste", html.lower())
 
     def test_password_reset_email_includes_link(self):
         from django.core import mail
@@ -214,7 +218,30 @@ class TransactionalMailTests(TestCase):
 
         PasswordResetEmail(user, "dXNlcg", "reset-token-xyz").send()
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("reset-token-xyz", mail.outbox[0].body)
+        self.assertNotIn("reset-token-xyz", mail.outbox[0].body)
+        self.assertNotIn("http", mail.outbox[0].body)
+        html = next(alt for alt, mime in mail.outbox[0].alternatives if mime == "text/html")
+        self.assertEqual(html.count("reset-token-xyz"), 1)
+        self.assertIn("Choose a new password", html)
+        self.assertNotIn("copy and paste", html.lower())
+
+    def test_partner_invite_and_nudge_use_the_shared_card(self):
+        from django.core import mail
+
+        from accounts.emails import PartnerInviteEmail, PartnerNudgeEmail
+
+        PartnerInviteEmail("partner@example.com", "Alex", "NIGHTCAP").send()
+        PartnerNudgeEmail("partner@example.com", "Alex", "Sunday").send()
+        self.assertEqual(len(mail.outbox), 2)
+
+        invite_html = next(alt for alt, mime in mail.outbox[0].alternatives if mime == "text/html")
+        nudge_html = next(alt for alt, mime in mail.outbox[1].alternatives if mime == "text/html")
+        self.assertIn("NIGHTCAP", invite_html)
+        self.assertIn("You're invited", invite_html)
+        self.assertIn("Sunday", nudge_html)
+        self.assertIn("Time to close the day", nudge_html)
+        self.assertIn("NightCap", invite_html)
+        self.assertIn("NightCap", nudge_html)
 
 
 class TokenSlashTests(TestCase):

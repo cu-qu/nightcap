@@ -1,7 +1,9 @@
-{{ inviter_name }} invited you to NightCap — couple habit tracking.
+{{ inviter_name }} invited you to NightCap.
 
-Create an account and enter this invite code to share goals like groceries, date nights, and habits — while keeping personal goals private.
+Create an account and enter this code to share goals like groceries, date nights, and habits. Personal goals stay private.
 
 Invite code: {{ invite_code }}
 
-In the app: Create account → enter the code (or paste it on the invite step).
+In the app, create an account and enter the code. You can also paste it on the invite step.
+
+The NightCap team
