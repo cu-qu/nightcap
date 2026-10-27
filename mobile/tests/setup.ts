@@ -2,6 +2,23 @@ import "@testing-library/react-native/matchers";
 
 jest.mock("react-native-worklets", () => ({}));
 
+jest.mock("expo-notifications", () => ({
+  setNotificationHandler: jest.fn(),
+  setNotificationChannelAsync: jest.fn(async () => undefined),
+  getPermissionsAsync: jest.fn(async () => ({ granted: true, ios: { status: 3 } })),
+  requestPermissionsAsync: jest.fn(async () => ({ granted: true, ios: { status: 3 } })),
+  cancelScheduledNotificationAsync: jest.fn(async () => undefined),
+  scheduleNotificationAsync: jest.fn(async () => "id"),
+  getDevicePushTokenAsync: jest.fn(async () => ({ data: "token" })),
+  getLastNotificationResponse: jest.fn(() => null),
+  clearLastNotificationResponse: jest.fn(),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  setBadgeCountAsync: jest.fn(async () => undefined),
+  AndroidImportance: { HIGH: 4 },
+  IosAuthorizationStatus: { PROVISIONAL: 3, AUTHORIZED: 2, DENIED: 1, NOT_DETERMINED: 0 },
+  SchedulableTriggerInputTypes: { DAILY: "daily" },
+}));
+
 jest.mock("react-native-reanimated", () => {
   const { View } = require("react-native");
   const identity = (value: unknown) => value;
