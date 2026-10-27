@@ -3,6 +3,7 @@ import { Text } from "react-native";
 
 import { useAuthStore } from "@/src/store/authStore";
 import { colors } from "@/src/theme/colors";
+import { needsEmailVerification } from "@/src/utils/needsEmailVerification";
 import { needsOnboarding } from "@/src/utils/needsOnboarding";
 import { needsPaywall } from "@/src/utils/needsPaywall";
 
@@ -19,6 +20,9 @@ export default function TabsLayout() {
 
   if (hydrated && !isAuthenticated) {
     return <Redirect href="/(auth)/login" />;
+  }
+  if (hydrated && isAuthenticated && needsEmailVerification(user)) {
+    return <Redirect href="/verify-email" />;
   }
   if (hydrated && isAuthenticated && needsOnboarding(user)) {
     return <Redirect href="/(onboarding)" />;

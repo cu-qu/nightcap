@@ -94,6 +94,13 @@ class ResendVerificationEmailTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         mock_send.assert_called_once()
 
+    @patch("accounts.services.VerifyAccountEmail.send", side_effect=RuntimeError("rejected"))
+    def test_resend_reports_when_provider_rejects(self, mock_send):
+        self.client.force_authenticate(user=self.user)
+        resp = self.client.post("/api/auth/verify-email/resend/")
+        self.assertEqual(resp.status_code, 503)
+        mock_send.assert_called_once()
+
     def test_resend_rejected_when_already_verified(self):
         self.user.email_verified = True
         self.user.save(update_fields=["email_verified"])

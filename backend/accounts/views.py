@@ -140,7 +140,7 @@ class VerifyEmailView(APIView):
     summary="Resend verification email",
     description="Sends a new verification email to the authenticated user's address.",
     request=None,
-    responses={200: MessageSerializer, 400: MessageSerializer},
+    responses={200: MessageSerializer, 400: MessageSerializer, 503: MessageSerializer},
 )
 class ResendVerificationEmailView(APIView):
     permission_classes = [IsAuthenticated]
@@ -152,9 +152,17 @@ class ResendVerificationEmailView(APIView):
                 {"detail": "Email is already verified."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        send_verification_email(user)
+        if not send_verification_email(user):
+            return Response(
+                {
+                    "detail": (
+                        "We could not send the confirmation email. Try again in a moment."
+                    )
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         return Response(
-            {"detail": "If your account needs verification, a new email has been sent."},
+            {"detail": "A new confirmation email has been sent."},
             status=status.HTTP_200_OK,
         )
 

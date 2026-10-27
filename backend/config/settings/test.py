@@ -23,6 +23,9 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 USE_R2_STORAGE = False
 
+# Product-API tests create users that never click a confirmation link.
+EMAIL_VERIFICATION_REQUIRED = False
+
 IAP_APPLE_VERIFY_SIGNATURE = False
 IAP_STAFF_COMPLIMENTARY = False
 IAP_GOOGLE_ALLOW_UNVERIFIED = True

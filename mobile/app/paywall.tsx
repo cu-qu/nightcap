@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Linking,
@@ -21,6 +21,7 @@ import { useCoupleIap } from "@/src/iap/useCoupleIap";
 import { useAuthStore } from "@/src/store/authStore";
 import { colors } from "@/src/theme/colors";
 import { confirmDeleteAccount } from "@/src/utils/deleteAccountPrompt";
+import { needsEmailVerification } from "@/src/utils/needsEmailVerification";
 import { membershipSummary } from "@/src/utils/needsPaywall";
 
 export default function PaywallScreen() {
@@ -42,6 +43,10 @@ export default function PaywallScreen() {
     },
     onError: (text) => setMessage(text),
   });
+
+  if (needsEmailVerification(user)) {
+    return <Redirect href="/verify-email" />;
+  }
 
   const monthlyPrice = iap.prices[MONTHLY_PRODUCT_ID]?.displayPrice || FALLBACK_PRICES[MONTHLY_PRODUCT_ID];
   const yearlyPrice = iap.prices[YEARLY_PRODUCT_ID]?.displayPrice || FALLBACK_PRICES[YEARLY_PRODUCT_ID];

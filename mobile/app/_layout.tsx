@@ -22,6 +22,7 @@ import { useReminderStore } from "@/src/store/reminderStore";
 import { useRitualDraftStore } from "@/src/store/ritualDraftStore";
 import { colors } from "@/src/theme/colors";
 import { todayIso } from "@/src/utils/date";
+import { needsEmailVerification } from "@/src/utils/needsEmailVerification";
 import { needsOnboarding } from "@/src/utils/needsOnboarding";
 import { needsPaywall } from "@/src/utils/needsPaywall";
 
@@ -55,6 +56,10 @@ function useReminderObserver() {
       const { isAuthenticated, user } = useAuthStore.getState();
       if (!isAuthenticated) {
         router.push("/(auth)/login");
+        return;
+      }
+      if (needsEmailVerification(user)) {
+        router.push("/verify-email");
         return;
       }
       if (needsOnboarding(user)) {
@@ -93,6 +98,11 @@ function MembershipRedirect() {
 
   useEffect(() => {
     if (!hydrated || !isAuthenticated) return;
+    if (needsEmailVerification(user)) {
+      if (pathname === "/verify-email" || pathname.startsWith("/verify-email/")) return;
+      router.replace("/verify-email");
+      return;
+    }
     if (needsOnboarding(user)) return;
     if (!needsPaywall(user)) return;
     if (pathname === "/paywall") return;
@@ -139,22 +149,22 @@ export default function RootLayout() {
   }, [hydrate, hydrateDraft, hydrateReminders]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || needsEmailVerification(user)) return;
     void loadCategories();
     void loadGroups();
     void flushOutbox();
-  }, [isAuthenticated, loadCategories, loadGroups]);
+  }, [isAuthenticated, user, loadCategories, loadGroups]);
 
   useEffect(() => {
     if (!hydrated) return;
-    if (isAuthenticated) {
+    if (isAuthenticated && !needsEmailVerification(user)) {
       void syncReminderSchedule();
       void registerPushTokenIfPossible({ prompt: partnered });
       if (remindersSupported()) {
         void Notifications.setBadgeCountAsync(0).catch(() => undefined);
       }
     } else void cancelNightlyReminder();
-  }, [hydrated, isAuthenticated, partnered, syncReminderSchedule]);
+  }, [hydrated, isAuthenticated, partnered, syncReminderSchedule, user]);
 
   if (!hydrated) {
     return (

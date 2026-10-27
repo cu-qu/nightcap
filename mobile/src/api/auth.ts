@@ -29,6 +29,12 @@ export async function fetchMe(): Promise<User> {
   return apiRequest<User>("/api/v1/auth/me/");
 }
 
+export async function resendVerificationEmail(): Promise<void> {
+  await apiRequest<unknown>("/api/v1/auth/verify-email/resend/", {
+    method: "POST",
+  });
+}
+
 export async function requestPasswordReset(input: {
   email?: string;
   username?: string;

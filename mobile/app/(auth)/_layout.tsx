@@ -1,5 +1,6 @@
 import { Redirect, Stack } from "expo-router";
 
+import { needsEmailVerification } from "@/src/utils/needsEmailVerification";
 import { needsOnboarding } from "@/src/utils/needsOnboarding";
 import { needsPaywall } from "@/src/utils/needsPaywall";
 import { useAuthStore } from "@/src/store/authStore";
@@ -11,6 +12,9 @@ export default function AuthLayout() {
   const user = useAuthStore((s) => s.user);
 
   if (hydrated && isAuthenticated) {
+    if (needsEmailVerification(user)) {
+      return <Redirect href="/verify-email" />;
+    }
     if (needsOnboarding(user)) {
       return <Redirect href="/(onboarding)" />;
     }

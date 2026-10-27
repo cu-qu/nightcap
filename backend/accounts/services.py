@@ -14,10 +14,12 @@ class PasswordResetError(Exception):
     """The reset link is missing, invalid, or expired."""
 
 
-def send_verification_email(user, *, verification_url: str | None = None) -> None:
+def send_verification_email(user, *, verification_url: str | None = None) -> bool:
     """
     Generate a fresh verification token, persist it, and send the verification email.
-    Logs and swallows errors so callers (e.g. registration) are not blocked by mail outages.
+
+    Returns False when the provider rejects the message. Callers that must not fail
+    the user's request (registration) can ignore the result; the resend endpoint uses it.
     """
     try:
         user.regenerate_email_verification_token()
@@ -29,6 +31,8 @@ def send_verification_email(user, *, verification_url: str | None = None) -> Non
             getattr(user, "pk", None),
             getattr(user, "email", None),
         )
+        return False
+    return True
 
 
 def verify_email_token(token: str) -> bool:

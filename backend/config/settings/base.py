@@ -123,6 +123,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "accounts.User"
 
+# Product APIs reject signed-in users until they confirm the address we mailed.
+# Profile, resend, billing, and account deletion stay available.
+EMAIL_VERIFICATION_REQUIRED = True
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",

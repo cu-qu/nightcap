@@ -7,6 +7,7 @@ export function makeUser(overrides: Partial<User> = {}): User {
     id: "16158342-1017-4df4-93b7-d5ca666e3ca5",
     username: "ux1022f",
     email: "ux1022f@example.com",
+    email_verified: true,
     onboarding_completed: true,
     tracking_mode: "solo",
     partnership: null,
