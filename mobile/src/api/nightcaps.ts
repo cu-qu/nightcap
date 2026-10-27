@@ -1,4 +1,5 @@
 import { apiRequest, getApiBaseUrl } from "@/src/api/client";
+import { toJpegMomentFile } from "@/src/photos/momentPhoto";
 import type { NightCap } from "@/src/types/api";
 
 export async function getNightCap(date: string): Promise<NightCap> {
@@ -53,11 +54,12 @@ export async function uploadNightCapPhoto(
   date: string,
   file: { uri: string; name: string; type: string }
 ): Promise<NightCap> {
+  const jpeg = await toJpegMomentFile(file.uri);
   const form = new FormData();
   form.append("photo", {
-    uri: file.uri,
-    name: file.name,
-    type: file.type,
+    uri: jpeg.uri,
+    name: jpeg.name,
+    type: jpeg.type,
   } as unknown as Blob);
   return apiRequest<NightCap>(nightCapPhotoPath(date), {
     method: "POST",

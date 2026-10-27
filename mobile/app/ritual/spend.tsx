@@ -185,10 +185,13 @@ export default function NightCapEntryScreen() {
       await enqueueRitual(payload);
       clear();
       setStarVisible(true);
-    } catch {
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "";
       Alert.alert(
         "Couldn’t save NightCap",
-        "Your answers are kept locally. Try again when you’re online."
+        detail && detail !== "Could not save NightCap."
+          ? detail
+          : "Your answers are kept locally. Try again when you’re online."
       );
     } finally {
       setSaving(false);

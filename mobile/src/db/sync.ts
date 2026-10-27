@@ -17,6 +17,7 @@ import { isFutureIsoDate } from "@/src/utils/date";
 
 let flushing = false;
 let flushAgain = false;
+let lastPhotoUploadError: unknown = null;
 
 export async function isOnline(): Promise<boolean> {
   try {
@@ -66,7 +67,11 @@ export async function enqueueRitual(
       throw new Error("Could not save NightCap.");
     }
     if (photoId != null && pending.has(photoId)) {
-      throw new Error("Could not save the photo.");
+      const detail =
+        lastPhotoUploadError instanceof Error
+          ? lastPhotoUploadError.message
+          : "Could not save the photo.";
+      throw new Error(detail);
     }
   }
   return { queued: true, response };
@@ -82,6 +87,7 @@ export async function flushOutbox(): Promise<RitualResponse | undefined> {
   flushing = true;
   let lastResponse: RitualResponse | undefined;
   let ritualFailed = false;
+  lastPhotoUploadError = null;
 
   try {
     do {
@@ -114,8 +120,9 @@ export async function flushOutbox(): Promise<RitualResponse | undefined> {
               });
             }
             await markOutboxSynced(row.id);
-          } catch {
+          } catch (error) {
             // Photo failures must not block later NightCap text/entry saves.
+            lastPhotoUploadError = error;
             continue;
           }
         }

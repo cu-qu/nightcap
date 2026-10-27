@@ -2,6 +2,21 @@ import "@testing-library/react-native/matchers";
 
 jest.mock("react-native-worklets", () => ({}));
 
+jest.mock("expo-image-manipulator", () => ({
+  SaveFormat: { JPEG: "jpeg" },
+  ImageManipulator: {
+    manipulate: () => ({
+      renderAsync: async () => ({
+        saveAsync: async () => ({
+          uri: "file:///cache/moment.jpg",
+          width: 100,
+          height: 100,
+        }),
+      }),
+    }),
+  },
+}));
+
 jest.mock("expo-notifications", () => ({
   setNotificationHandler: jest.fn(),
   setNotificationChannelAsync: jest.fn(async () => undefined),
