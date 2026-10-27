@@ -4,10 +4,13 @@ set -o errexit
 echo "Installing dependencies..."
 pip install -r requirements.txt
 
+export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings.production}"
+if [ -z "${ALLOWED_HOSTS:-}" ]; then
+  export ALLOWED_HOSTS="${RAILWAY_PUBLIC_DOMAIN:-.up.railway.app}"
+fi
+
 echo "Collecting static files..."
-DJANGO_SETTINGS_MODULE=config.settings.production \
-  ALLOWED_HOSTS="${ALLOWED_HOSTS:-.up.railway.app}" \
-  python manage.py collectstatic --noinput
+python manage.py collectstatic --noinput
 
 echo "Running migrations..."
 python manage.py migrate --noinput

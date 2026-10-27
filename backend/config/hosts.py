@@ -11,8 +11,11 @@ def trusted_origins(raw: str, public_domain: str = "") -> list[str]:
     return origins
 
 
-def parse_allowed_hosts(raw: str) -> list[str]:
+def parse_allowed_hosts(raw: str, public_domain: str = "") -> list[str]:
     hosts = [host.strip() for host in (raw or "").split(",") if host.strip()]
+    public = (public_domain or "").strip()
+    if public and public not in hosts:
+        hosts.append(public)
     if not hosts:
         raise ImproperlyConfigured(
             "Set ALLOWED_HOSTS to the public API host before starting this environment."

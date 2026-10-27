@@ -6,7 +6,10 @@ from config.r2 import configured_media_storages, r2_is_enabled
 from .base import *
 
 DEBUG = os.environ.get("DEBUG", "false").lower() in ("true", "1", "yes")
-ALLOWED_HOSTS = parse_allowed_hosts(os.environ.get("ALLOWED_HOSTS", ""))
+ALLOWED_HOSTS = parse_allowed_hosts(
+    os.environ.get("ALLOWED_HOSTS", ""),
+    os.environ.get("RAILWAY_PUBLIC_DOMAIN", ""),
+)
 
 # Recompute after production DEBUG default (base.py defaults DEBUG to True).
 USE_R2_STORAGE = r2_is_enabled(debug=DEBUG)

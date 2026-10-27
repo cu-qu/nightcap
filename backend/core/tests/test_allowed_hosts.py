@@ -11,6 +11,12 @@ class AllowedHostsTests(SimpleTestCase):
         with self.assertRaises(ImproperlyConfigured):
             parse_allowed_hosts(" , ")
 
+    def test_includes_the_railway_domain_when_the_list_is_empty(self):
+        self.assertEqual(
+            parse_allowed_hosts("", "nightcap-api-production-ce8f.up.railway.app"),
+            ["nightcap-api-production-ce8f.up.railway.app"],
+        )
+
     def test_splits_and_strips(self):
         self.assertEqual(
             parse_allowed_hosts(" api.nightcap.app, .up.railway.app "),
