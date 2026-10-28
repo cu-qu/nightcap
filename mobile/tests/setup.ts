@@ -108,7 +108,10 @@ jest.mock("@/src/api/groups", () => ({
 
 jest.mock("@/src/api/goals", () => ({
   getGroupSummary: jest.fn(async () => ({ groups: [] })),
+  getPendingGoals: jest.fn(async () => []),
   setGoal: jest.fn(),
+  acceptGoal: jest.fn(),
+  declineGoal: jest.fn(),
   deactivateGoal: jest.fn(),
 }));
 

@@ -111,8 +111,9 @@ def send_partner_nudge(user, day: date) -> dict:
 
     channels: list[str] = []
     day_label = _format_nudge_day(day)
-    title = f"{user.username} nudged you 🌙"
-    body = f"Finish your NightCap for {day_label}."
+    when = "today" if day == today else day_label
+    title = "NightCap"
+    body = f"{user.username} wants you to fill out your NightCap for {when}!"
     records = list(
         DevicePushToken.objects.filter(
             user=partner, platform=DevicePushToken.PLATFORM_IOS

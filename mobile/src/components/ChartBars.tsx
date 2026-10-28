@@ -11,9 +11,12 @@ export type ChartBarSegment = {
 export type ChartBarDatum = {
   key: string;
   label: string;
+  sublabel?: string;
   value: number;
   display: string;
   segments?: ChartBarSegment[];
+  dim?: boolean;
+  today?: boolean;
 };
 
 type Props = {
@@ -37,25 +40,36 @@ export function ChartBars({
   }
 
   const max = Math.max(...points.map((p) => p.value), 1);
+  const roomy = points.length <= 7;
+  const barMax = roomy ? 120 : 140;
   const showValueLabels = points.length <= 16;
 
   return (
     <View style={styles.card}>
-      <View style={styles.row}>
+      <View style={[styles.row, roomy && styles.rowRoomy]}>
         {points.map((p) => {
-          const height = Math.max(4, (p.value / max) * 140);
+          const height = p.value > 0 ? Math.max(8, (p.value / max) * barMax) : 4;
           const segments = (p.segments ?? []).filter((s) => s.value > 0);
           const segTotal = segments.reduce((s, seg) => s + seg.value, 0);
+          const textTone = [
+            p.dim && styles.dimmed,
+            p.today && styles.todayText,
+          ];
           return (
-            <View key={p.key} style={styles.col}>
-              <Text style={styles.value} numberOfLines={1}>
+            <View key={p.key} style={[styles.col, roomy && styles.colRoomy]}>
+              <Text
+                style={[styles.value, roomy && styles.valueRoomy, ...textTone]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.65}
+              >
                 {showValueLabels && p.value > 0
                   ? p.display
                   : p.value === max
                     ? p.display
                     : ""}
               </Text>
-              <View style={[styles.bar, { height }]}>
+              <View style={[styles.bar, roomy && styles.barRoomy, { height }]}>
                 {p.value > 0 && segTotal > 0 ? (
                   stackHeights(segments, height).map((seg) => (
                     <View
@@ -69,11 +83,26 @@ export function ChartBars({
                   ))
                 ) : (
                   <View
-                    style={[styles.solid, { backgroundColor: color }]}
+                    style={[
+                      styles.solid,
+                      {
+                        backgroundColor: p.value > 0 ? color : colors.border,
+                      },
+                    ]}
                   />
                 )}
               </View>
-              <Text style={styles.label}>{p.label}</Text>
+              <Text
+                style={[styles.label, roomy && styles.labelRoomy, ...textTone]}
+                numberOfLines={1}
+              >
+                {p.label}
+              </Text>
+              {p.sublabel ? (
+                <Text style={[styles.sublabel, ...textTone]} numberOfLines={1}>
+                  {p.sublabel}
+                </Text>
+              ) : null}
             </View>
           );
         })}
@@ -130,16 +159,29 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
   },
+  rowRoomy: {
+    height: 204,
+    gap: 6,
+  },
   col: {
     flex: 1,
     alignItems: "center",
     marginHorizontal: 1,
   },
+  colRoomy: {
+    marginHorizontal: 0,
+  },
   value: {
     marginBottom: 4,
+    minHeight: 14,
     fontSize: 9,
     fontWeight: "700",
     color: colors.muted,
+  },
+  valueRoomy: {
+    minHeight: 16,
+    fontSize: 12,
+    color: colors.text,
   },
   bar: {
     width: "100%",
@@ -149,6 +191,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     justifyContent: "flex-end",
   },
+  barRoomy: {
+    maxWidth: 36,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+  },
   solid: {
     flex: 1,
     width: "100%",
@@ -157,5 +204,22 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 9,
     color: colors.muted,
+  },
+  labelRoomy: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  sublabel: {
+    marginTop: 1,
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  dimmed: {
+    opacity: 0.4,
+  },
+  todayText: {
+    color: colors.accentSoft,
   },
 });

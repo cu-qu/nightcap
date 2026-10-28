@@ -18,6 +18,13 @@ def get_user_partnership(user) -> Partnership | None:
         return None
 
 
+def partnership_is_paired(partnership: Partnership | None) -> bool:
+    """True once both people have joined the couple space."""
+    if partnership is None:
+        return False
+    return partnership.members.count() >= 2
+
+
 def get_partner_user(user):
     """The other person in the caller's couple space, if linked."""
     partnership = get_user_partnership(user)

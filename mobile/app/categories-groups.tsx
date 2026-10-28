@@ -13,6 +13,7 @@ import {
 } from "react-native";
 
 import { AddCategoryModal } from "@/src/components/AddCategoryModal";
+import { CreateGroupSheet } from "@/src/components/CreateGroupSheet";
 import { EmojiPicker } from "@/src/components/EmojiPicker";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { useGroupsStore } from "@/src/store/groupsStore";
@@ -49,7 +50,7 @@ export default function CategoriesGroupsScreen() {
   const removeFromGroup = useGroupsStore((s) => s.removeFromGroup);
   const assignToGroup = useGroupsStore((s) => s.assignToGroup);
 
-  const [newGroupName, setNewGroupName] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
   const [editName, setEditName] = useState("");
@@ -63,10 +64,10 @@ export default function CategoriesGroupsScreen() {
     }, [refresh])
   );
 
-  async function onCreateGroup() {
-    const name = newGroupName.trim();
-    if (!name) return;
-    const key = slugKey(name);
+  async function onCreateGroup(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const key = slugKey(trimmed);
     if (!key) {
       Alert.alert("Invalid name", "Enter a name with letters or numbers.");
       return;
@@ -76,13 +77,13 @@ export default function CategoriesGroupsScreen() {
       const nextOrder =
         groups.reduce((max, g) => Math.max(max, g.sort_order), 0) + 1;
       await createGroup({
-        name,
+        name: trimmed,
         key,
         sort_order: nextOrder,
         icon: "custom",
         show_in_ritual: true,
       });
-      setNewGroupName("");
+      setCreateOpen(false);
     } catch (e) {
       Alert.alert(
         "Could not create group",
@@ -284,6 +285,12 @@ export default function CategoriesGroupsScreen() {
         ) : null}
 
         <Text style={styles.section}>Groups</Text>
+        <Pressable
+          onPress={() => setCreateOpen(true)}
+          style={styles.newGroupBtn}
+        >
+          <Text style={styles.newGroupBtnText}>+ New group</Text>
+        </Pressable>
         {groups.map((group, index) => {
           const label =
             group.key === SPEND_GROUP_KEY ? "Spend" : group.name;
@@ -387,21 +394,6 @@ export default function CategoriesGroupsScreen() {
           );
         })}
 
-        <Text style={styles.section}>Create custom group</Text>
-        <TextInput
-          value={newGroupName}
-          onChangeText={setNewGroupName}
-          placeholder="Group name"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-        />
-        <PrimaryButton
-          title="Create group"
-          loading={busy}
-          disabled={!newGroupName.trim()}
-          onPress={() => void onCreateGroup()}
-        />
-
         <Text style={[styles.section, { marginTop: 32 }]}>Ungrouped</Text>
         <Text style={styles.intro}>
           Categories removed from a group land here. Reassign them anytime.
@@ -444,6 +436,13 @@ export default function CategoriesGroupsScreen() {
           />
         </View>
       </ScrollView>
+
+      <CreateGroupSheet
+        visible={createOpen}
+        loading={busy}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={onCreateGroup}
+      />
 
       <AddCategoryModal
         visible={addModalVisible}
@@ -633,6 +632,22 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   addCategoryBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.accentSoft,
+  },
+  newGroupBtn: {
+    marginBottom: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderStyle: "dashed",
+    backgroundColor: "rgba(139, 92, 246, 0.12)",
+    paddingVertical: 14,
+  },
+  newGroupBtnText: {
     fontSize: 15,
     fontWeight: "700",
     color: colors.accentSoft,

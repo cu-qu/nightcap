@@ -1,9 +1,10 @@
 from datetime import date
+from decimal import Decimal
 
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from accounts.models import User
+from accounts.models import Partnership, PartnershipMember, User
 from categories.defaults import (
     DEFAULT_GROUPS,
     create_default_categories_for_user,
@@ -11,6 +12,7 @@ from categories.defaults import (
 )
 from categories.models import CategoryGroup, TrackingCategory
 from entries.models import NightCap
+from goals.models import Goal
 
 
 class CategoryGroupAndNightCapApiTests(TestCase):
@@ -143,6 +145,85 @@ class CategoryGroupAndNightCapApiTests(TestCase):
         }
         self.assertIn("Groceries", names)
         self.assertIn("Clothes", names)
+
+    def test_boolean_category_can_become_an_amount(self):
+        habit = TrackingCategory.objects.create(
+            user=self.user,
+            name="Meditate",
+            type=TrackingCategory.HABIT,
+            metric_kind=TrackingCategory.METRIC_BOOLEAN,
+            unit="count",
+        )
+        resp = self.client.patch(
+            f"/api/v1/categories/{habit.id}/",
+            {"metric_kind": "amount", "unit": "usd"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        habit.refresh_from_db()
+        self.assertEqual(habit.metric_kind, TrackingCategory.METRIC_AMOUNT)
+        self.assertEqual(habit.unit, "usd")
+
+    def test_shared_category_measure_updates_partner_copy(self):
+        partner = User.objects.create_user(
+            username="partneruser",
+            email="partner@example.com",
+            password="testpass123",
+        )
+        partnership = Partnership.objects.create(created_by=self.user)
+        PartnershipMember.objects.create(
+            partnership=partnership,
+            user=self.user,
+            role=PartnershipMember.ROLE_OWNER,
+        )
+        PartnershipMember.objects.create(
+            partnership=partnership,
+            user=partner,
+            role=PartnershipMember.ROLE_PARTNER,
+        )
+        habit = TrackingCategory.objects.create(
+            user=self.user,
+            name="Meditate",
+            type=TrackingCategory.HABIT,
+            metric_kind=TrackingCategory.METRIC_BOOLEAN,
+            unit="count",
+        )
+        partner_habit = TrackingCategory.objects.create(
+            user=partner,
+            name="Meditate",
+            type=TrackingCategory.HABIT,
+            metric_kind=TrackingCategory.METRIC_BOOLEAN,
+            unit="count",
+        )
+        Goal.objects.create(
+            user=self.user,
+            category=habit,
+            target_value=Decimal("1"),
+            direction=Goal.DIRECTION_MIN,
+            scope=Goal.SCOPE_SHARED,
+            partnership=partnership,
+            accepted=True,
+        )
+        resp = self.client.patch(
+            f"/api/v1/categories/{habit.id}/",
+            {"metric_kind": "quantity", "unit": "count"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        partner_habit.refresh_from_db()
+        self.assertEqual(partner_habit.metric_kind, TrackingCategory.METRIC_QUANTITY)
+        self.assertEqual(partner_habit.unit, "count")
+
+    def test_spend_category_stays_in_dollars(self):
+        groceries = TrackingCategory.objects.get(user=self.user, name="Groceries")
+        resp = self.client.patch(
+            f"/api/v1/categories/{groceries.id}/",
+            {"metric_kind": "boolean", "unit": "count"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        groceries.refresh_from_db()
+        self.assertEqual(groceries.metric_kind, TrackingCategory.METRIC_AMOUNT)
 
     def test_nightcap_get_create_and_patch(self):
         today = date.today().isoformat()

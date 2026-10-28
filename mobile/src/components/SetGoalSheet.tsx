@@ -16,7 +16,8 @@ import { useAuthStore } from "@/src/store/authStore";
 import { useGroupsStore } from "@/src/store/groupsStore";
 import { colors } from "@/src/theme/colors";
 import { categoryGlyph } from "@/src/theme/iconMap";
-import type { Category, CategoryCreateInput } from "@/src/types/api";
+import { GENERAL_UNIT_OPTIONS, unitOptionsForGroupKey } from "@/src/theme/unitOptions";
+import type { Category, CategoryCreateInput, MetricKind } from "@/src/types/api";
 import { SPEND_GROUP_KEY } from "@/src/types/api";
 import type { GoalPeriod, GroupGoalItem, SetGoalInput } from "@/src/types/goals";
 import { sanitizeDecimalInput } from "@/src/utils/date";
@@ -33,6 +34,17 @@ const UNGROUPED = "ungrouped";
 
 function groupLabel(g: { key: string; name: string }) {
   return g.key === SPEND_GROUP_KEY ? "Spend" : g.name;
+}
+
+type Measure = "boolean" | "amount";
+
+function unitIdFor(metric: string, unit: string): string {
+  if (metric === "boolean") return "boolean";
+  const match = GENERAL_UNIT_OPTIONS.find(
+    (option) => option.metric_kind === metric && option.unit === unit
+  );
+  if (match) return match.id;
+  return metric === "amount" ? "usd" : "count";
 }
 
 type SheetPeriod = SetGoalInput["period"];
@@ -64,9 +76,14 @@ export function SetGoalSheet({
   const groups = useGroupsStore((s) => s.groups);
   const ungrouped = useGroupsStore((s) => s.ungrouped);
   const createCategory = useGroupsStore((s) => s.createCategory);
-  const canShare = !!useAuthStore((s) => s.user?.partnership);
+  const updateCategory = useGroupsStore((s) => s.updateCategory);
+  const canShare = !!useAuthStore((s) => s.user?.partnership?.is_full);
   const [period, setPeriod] = useState<SheetPeriod>(initialPeriod);
   const editing = !!existingGoal;
+  const [measure, setMeasure] = useState<Measure>(
+    existingGoal?.category.metric_kind === "boolean" ? "boolean" : "amount"
+  );
+  const [unitId, setUnitId] = useState("count");
   const [intent, setIntent] = useState<GoalIntent>("stay_under");
   const [categoryUuid, setCategoryUuid] = useState<string | null>(null);
   const [groupFilter, setGroupFilter] = useState(ALL_GROUPS);
@@ -84,7 +101,10 @@ export function SetGoalSheet({
     setAddOpen(false);
     setPinnedCategory(null);
     if (existingGoal) {
+      const kind = existingGoal.category.metric_kind;
       setPeriod(existingGoal.period);
+      setMeasure(kind === "boolean" ? "boolean" : "amount");
+      setUnitId(unitIdFor(kind, existingGoal.category.unit));
       setIntent(intentForGoal(existingGoal));
       setCategoryUuid(existingGoal.category.uuid);
       setTarget(nativeTargetInput(existingGoal));
@@ -93,6 +113,8 @@ export function SetGoalSheet({
       return;
     }
     setPeriod(initialPeriod);
+    setMeasure("amount");
+    setUnitId("count");
     setIntent("stay_under");
     setCategoryUuid(null);
     setTarget("");
@@ -152,11 +174,35 @@ export function SetGoalSheet({
     return list;
   }, [categories, groupFilter, pinnedCategory, ritualGroups, ungrouped]);
 
+  const trackedCategory = useMemo(() => {
+    if (!categoryUuid) return null;
+    const stored = [
+      ...ritualGroups.flatMap((g) => g.categories),
+      ...groups.flatMap((g) => g.categories ?? []),
+      ...ungrouped,
+      ...(pinnedCategory ? [pinnedCategory] : []),
+    ];
+    return stored.find((c) => c.uuid === categoryUuid) ?? null;
+  }, [categoryUuid, groups, pinnedCategory, ritualGroups, ungrouped]);
+
   const selected =
+    trackedCategory ??
     categories.find((c) => c.uuid === categoryUuid) ??
     (pinnedCategory?.uuid === categoryUuid ? pinnedCategory : null) ??
     existingGoal?.category ??
     null;
+
+  const spendCategory = trackedCategory?.group_key === SPEND_GROUP_KEY;
+  const canChangeMeasure = editing && !spendCategory;
+  const measureUnits = useMemo(() => {
+    return unitOptionsForGroupKey(trackedCategory?.group_key).filter(
+      (option) => option.metric_kind !== "boolean"
+    );
+  }, [trackedCategory?.group_key]);
+  const selectedUnit =
+    measureUnits.find((option) => option.id === unitId) ??
+    measureUnits.find((option) => option.id === "count") ??
+    measureUnits[0];
 
   const periodOptions: SheetPeriod[] =
     existingGoal?.period === "daily"
@@ -178,11 +224,42 @@ export function SetGoalSheet({
     setIntent(defaultIntentForMetricKind(cat.metric_kind));
   }
 
-  const booleanGoal = selected?.metric_kind === "boolean";
+  const booleanGoal = editing
+    ? measure === "boolean"
+    : selected?.metric_kind === "boolean";
+  const activeKind: MetricKind | undefined =
+    editing && !booleanGoal ? selectedUnit?.metric_kind : selected?.metric_kind;
   const reachHint =
-    selected?.metric_kind === "amount"
+    activeKind === "amount"
       ? "Hit a money target (donate, invest, save)"
       : "Hit a time, distance, or count target";
+  const measureChanged =
+    editing &&
+    trackedCategory != null &&
+    (booleanGoal
+      ? trackedCategory.metric_kind !== "boolean"
+      : trackedCategory.metric_kind !== selectedUnit?.metric_kind ||
+        trackedCategory.unit !== selectedUnit?.unit);
+
+  function chooseMeasure(next: Measure) {
+    setMeasure(next);
+    if (next === "boolean") {
+      setIntent((current) =>
+        current === "did_not" || current === "stay_under" ? "did_not" : "did"
+      );
+      return;
+    }
+    setIntent((current) =>
+      current === "stay_under" || current === "did_not" ? "stay_under" : "reach"
+    );
+    setUnitId((current) => {
+      if (current !== "boolean" && measureUnits.some((option) => option.id === current)) {
+        return current;
+      }
+      return spendCategory ? "usd" : "count";
+    });
+    setTarget((current) => (current.trim() === "1" ? "" : current));
+  }
 
   async function onAddCategory(input: CategoryCreateInput) {
     setAdding(true);
@@ -225,6 +302,32 @@ export function SetGoalSheet({
     setSaving(true);
     setError(null);
     try {
+      if (editing) {
+        const nextMetric = booleanGoal
+          ? { metric_kind: "boolean" as const, unit: "count" }
+          : selectedUnit
+            ? {
+                metric_kind: selectedUnit.metric_kind,
+                unit: selectedUnit.unit,
+              }
+            : null;
+        if (!nextMetric) {
+          setError("Pick a unit for this amount.");
+          return;
+        }
+        const storedKind =
+          trackedCategory?.metric_kind ?? existingGoal?.category.metric_kind;
+        const storedUnit = trackedCategory?.unit ?? existingGoal?.category.unit;
+        const metricDiffers =
+          storedKind !== nextMetric.metric_kind || storedUnit !== nextMetric.unit;
+        if (metricDiffers) {
+          if (!trackedCategory) {
+            setError("Couldn't find this category to change how it's tracked.");
+            return;
+          }
+          await updateCategory(trackedCategory.id, nextMetric);
+        }
+      }
       await onSubmit({
         category_uuid: selected.uuid,
         target_value: booleanGoal ? "1" : target.trim(),
@@ -265,9 +368,7 @@ export function SetGoalSheet({
               </Text>
               <Text style={styles.hint}>
                 {editing
-                  ? booleanGoal
-                    ? "Change whether you did it, the period, or who this is for."
-                    : "Change the target, period, or who this is for."
+                  ? "Switch between did / did not and an amount, or change the period and who it's for."
                   : "Stay under a budget, reach a target, or track did / did not."}
               </Text>
 
@@ -291,6 +392,46 @@ export function SetGoalSheet({
                   </Pressable>
                 ))}
               </View>
+
+              {canChangeMeasure ? (
+                <>
+                  <Text style={styles.label}>Measure</Text>
+                  <View style={styles.segment}>
+                    <Pressable
+                      onPress={() => chooseMeasure("boolean")}
+                      style={[
+                        styles.segBtn,
+                        measure === "boolean" && styles.segBtnOn,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.segText,
+                          measure === "boolean" && styles.segTextOn,
+                        ]}
+                      >
+                        Did / Did not
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => chooseMeasure("amount")}
+                      style={[
+                        styles.segBtn,
+                        measure === "amount" && styles.segBtnOn,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.segText,
+                          measure === "amount" && styles.segTextOn,
+                        ]}
+                      >
+                        Amount
+                      </Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
 
               <Text style={styles.label}>Goal type</Text>
               {booleanGoal ? (
@@ -370,6 +511,41 @@ export function SetGoalSheet({
                     ? "Don’t go over this amount or count"
                     : reachHint}
               </Text>
+              {editing && !booleanGoal && measureUnits.length > 1 ? (
+                <>
+                  <Text style={styles.label}>Unit</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterRow}
+                  >
+                    {measureUnits.map((option) => {
+                      const on = selectedUnit?.id === option.id;
+                      return (
+                        <Pressable
+                          key={option.id}
+                          onPress={() => setUnitId(option.id)}
+                          style={[styles.filterChip, on && styles.filterChipOn]}
+                        >
+                          <Text
+                            style={[
+                              styles.filterText,
+                              on && styles.filterTextOn,
+                            ]}
+                          >
+                            {option.chip}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </>
+              ) : null}
+              {measureChanged ? (
+                <Text style={styles.modeHint}>
+                  New check-ins use this. Older logs stay as they were.
+                </Text>
+              ) : null}
 
               {existingGoal ? (
                 <>
@@ -457,10 +633,10 @@ export function SetGoalSheet({
                 <>
                   <Text style={styles.label}>
                     Target
-                    {selected?.metric_kind === "amount"
+                    {activeKind === "amount"
                       ? " ($)"
-                      : selected?.unit
-                        ? ` (${selected.unit})`
+                      : (editing ? selectedUnit?.unit : selected?.unit)
+                        ? ` (${editing ? selectedUnit?.unit : selected?.unit})`
                         : ""}
                   </Text>
                   <TextInput
@@ -513,7 +689,7 @@ export function SetGoalSheet({
                   </View>
                   <Text style={styles.modeHint}>
                     {scope === "shared"
-                      ? "Both of you log against the same target"
+                      ? "Counts both of you after your partner approves"
                       : "Only your entries count"}
                   </Text>
                 </>

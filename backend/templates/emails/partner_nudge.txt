@@ -1,4 +1,4 @@
-{{ from_username }} nudged you to finish NightCap for {{ day_label }}.
+{{ from_username }} wants you to fill out your NightCap for {{ day_label }}!
 
 Open the app and log spend, habits, and a note.
 

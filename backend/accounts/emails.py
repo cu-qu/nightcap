@@ -131,7 +131,7 @@ class PartnerNudgeEmail:
 
     def send(self) -> None:
         send_transactional_mail(
-            subject=f"{self.from_username} nudged you to NightCap",
+            subject=f"{self.from_username} wants you to fill out your NightCap",
             text_template="emails/partner_nudge.txt",
             html_template="emails/partner_nudge.html",
             context={

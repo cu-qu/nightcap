@@ -70,9 +70,7 @@ export function CalendarDaySummary({
         <Text style={styles.partnerStatus}>
           {partner.has_nightcap
             ? `${partner.username} NightCap’d this day`
-            : partner.nudged_at
-              ? `Nudged ${partner.username} · waiting`
-              : `${partner.username} hasn’t NightCap’d yet`}
+            : `${partner.username} hasn’t NightCap’d yet`}
         </Text>
       ) : null}
 

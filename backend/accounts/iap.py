@@ -160,10 +160,81 @@ def verify_apple_jws(jws: str) -> dict:
         "original_transaction_id": original,
         "transaction_id": str(payload.get("transactionId") or original),
         "expires_at": expires_at,
+        "revocation_date": _ms_to_datetime(payload.get("revocationDate") or payload.get("revocation_date")),
         "auto_renewing": payload.get("type") in (None, "Auto-Renewable Subscription"),
         "purchase_token": jws,
         "environment": payload.get("environment") or "",
     }
+
+
+def _auto_renew_on(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true"}
+
+
+def updates_from_apple_notification(payload: dict) -> dict | None:
+    """Map an App Store Server Notification V2 body onto membership fields.
+
+    Returns None when the notice has no transaction to apply, such as a test ping.
+    The returned dict includes original_transaction_id so the caller can find the row.
+    """
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    bundle = data.get("bundleId") or data.get("bundle_id") or ""
+    if bundle:
+        _require_bundle(bundle)
+
+    signed_txn = data.get("signedTransactionInfo") or payload.get("signedTransactionInfo")
+    if not signed_txn:
+        return None
+
+    purchase = verify_apple_jws(signed_txn)
+    if not purchase["original_transaction_id"]:
+        return None
+
+    renewal: dict = {}
+    signed_renewal = data.get("signedRenewalInfo")
+    if signed_renewal:
+        verify = bool(getattr(settings, "IAP_APPLE_VERIFY_SIGNATURE", not settings.DEBUG))
+        decoded = _decode_jws(signed_renewal, verify_signature=verify)
+        if isinstance(decoded, dict):
+            renewal = decoded
+
+    notification_type = (payload.get("notificationType") or "").upper()
+    subtype = (payload.get("subtype") or "").upper()
+    updates = {
+        "original_transaction_id": purchase["original_transaction_id"],
+        "store_expires_at": purchase["expires_at"],
+        "product_id": purchase["product_id"],
+        "plan": purchase["plan"],
+        "latest_transaction_id": purchase.get("transaction_id") or "",
+    }
+    if "autoRenewStatus" in renewal:
+        updates["auto_renewing"] = _auto_renew_on(renewal.get("autoRenewStatus"))
+
+    if notification_type == "DID_CHANGE_RENEWAL_STATUS":
+        if subtype == "AUTO_RENEW_DISABLED":
+            updates["auto_renewing"] = False
+        elif subtype == "AUTO_RENEW_ENABLED":
+            updates["auto_renewing"] = True
+
+    if notification_type == "DID_FAIL_TO_RENEW" and subtype == "GRACE_PERIOD":
+        grace = _ms_to_datetime(renewal.get("gracePeriodExpiresDate"))
+        if grace is not None:
+            updates["store_expires_at"] = grace
+
+    now = datetime.now(dt_timezone.utc)
+    revocation = purchase.get("revocation_date")
+    if notification_type in {"REFUND", "REVOKE"} or revocation is not None:
+        updates["store_expires_at"] = revocation or now
+        updates["auto_renewing"] = False
+
+    if notification_type in {"EXPIRED", "GRACE_PERIOD_EXPIRED"}:
+        if updates["store_expires_at"] > now:
+            updates["store_expires_at"] = now
+        updates["auto_renewing"] = False
+
+    return updates
 
 
 def _google_service_account_info() -> dict | None:

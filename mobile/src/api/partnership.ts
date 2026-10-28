@@ -75,9 +75,9 @@ export async function removeDevicePushToken(token: string): Promise<{ detail: st
 }
 
 export function nudgeSentMessage(nudge: PartnerNudge): string {
-  if (nudge.already_sent) return `Already nudged ${nudge.to_username}`;
+  if (nudge.already_sent) return `Already reminded ${nudge.to_username}`;
   if (nudge.delivered_via.includes("push")) {
     return `Notification sent to ${nudge.to_username}`;
   }
-  return `Nudged ${nudge.to_username}`;
+  return `Reminded ${nudge.to_username}`;
 }

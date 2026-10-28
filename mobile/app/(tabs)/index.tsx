@@ -123,7 +123,7 @@ export default function HomeScreen() {
       );
       setNudgeMessage(nudgeSentMessage(nudge));
     } catch (e) {
-      setNudgeMessage(e instanceof Error ? e.message : "Couldn’t send that nudge");
+      setNudgeMessage(e instanceof Error ? e.message : "Couldn’t send that reminder");
     } finally {
       setNudging(false);
     }
@@ -171,7 +171,7 @@ export default function HomeScreen() {
           <Text style={styles.ritualTitle}>NightCap</Text>
           <Text style={styles.ritualBody}>
             {incomingNudge
-              ? `${partner?.username} nudged you to close out tonight.`
+              ? `${partner?.username} wants you to fill out your NightCap for today.`
               : hasTodayNightCap
                 ? "You’ve already logged tonight. Open it to update spend, habits, mood, or reflection."
                 : "Close out the day — groups, mood, and a short reflection."}
@@ -180,9 +180,7 @@ export default function HomeScreen() {
             <Text style={styles.partnerLine}>
               {partner.has_nightcap
                 ? `${partner.username} already NightCap’d tonight.`
-                : partner.nudged_at
-                  ? `Nudged ${partner.username} · waiting`
-                  : `${partner.username} hasn’t NightCap’d yet.`}
+                : `${partner.username} hasn’t NightCap’d yet.`}
             </Text>
           ) : null}
           <View style={styles.ritualActions}>
@@ -198,7 +196,7 @@ export default function HomeScreen() {
             />
             {canNudgePartner ? (
               <PrimaryButton
-                title={`Nudge ${partner?.username ?? "partner"}`}
+                title="Remind Partner"
                 variant="secondary"
                 onPress={() => void onNudgePartner()}
                 loading={nudging}

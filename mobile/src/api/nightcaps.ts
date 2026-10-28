@@ -1,3 +1,5 @@
+import { File, Paths } from "expo-file-system";
+
 import { apiRequest, getApiBaseUrl } from "@/src/api/client";
 import { toJpegMomentFile } from "@/src/photos/momentPhoto";
 import type { NightCap } from "@/src/types/api";
@@ -50,17 +52,27 @@ export function resolveNightCapPhotoUri(opts: {
   return nightCapPhotoUrl(opts.date, opts.cacheKey);
 }
 
+/**
+ * Expo's fetch only accepts string, Blob, or a file with `bytes()`.
+ * The `{ uri, name, type }` part throws "Unsupported FormDataPart implementation".
+ * Copy onto a `.jpg` path so the multipart filename passes the API's extension check.
+ */
+function jpegUploadFile(uri: string): File {
+  const source = new File(uri);
+  const upload = new File(Paths.cache, "moment.jpg");
+  if (source.uri !== upload.uri) {
+    source.copySync(upload, { overwrite: true });
+  }
+  return upload;
+}
+
 export async function uploadNightCapPhoto(
   date: string,
   file: { uri: string; name: string; type: string }
 ): Promise<NightCap> {
   const jpeg = await toJpegMomentFile(file.uri);
   const form = new FormData();
-  form.append("photo", {
-    uri: jpeg.uri,
-    name: jpeg.name,
-    type: jpeg.type,
-  } as unknown as Blob);
+  form.append("photo", jpegUploadFile(jpeg.uri));
   return apiRequest<NightCap>(nightCapPhotoPath(date), {
     method: "POST",
     body: form,

@@ -119,6 +119,119 @@ def ensure_category_like(user, source: TrackingCategory) -> TrackingCategory:
     return category
 
 
+def _clear_personal_snapshot(goal: Goal) -> None:
+    goal.personal_snapshot_target = None
+    goal.personal_snapshot_period = ""
+    goal.personal_snapshot_direction = ""
+
+
+def accept_shared_goal(goal: Goal) -> None:
+    goal.accepted = True
+    _clear_personal_snapshot(goal)
+    goal.save(
+        update_fields=[
+            "accepted",
+            "personal_snapshot_target",
+            "personal_snapshot_period",
+            "personal_snapshot_direction",
+            "updated_at",
+        ]
+    )
+
+
+def _keep_as_personal(goal: Goal) -> None:
+    goal.scope = Goal.SCOPE_PERSONAL
+    goal.partnership = None
+    goal.proposed_by = None
+    goal.accepted = True
+    _clear_personal_snapshot(goal)
+    goal.save(
+        update_fields=[
+            "scope",
+            "partnership",
+            "proposed_by",
+            "accepted",
+            "personal_snapshot_target",
+            "personal_snapshot_period",
+            "personal_snapshot_direction",
+            "updated_at",
+        ]
+    )
+
+
+def _restore_or_drop_copy(goal: Goal) -> None:
+    """Decline a proposal. Restore a personal goal when one was overwritten."""
+    if goal.personal_snapshot_period:
+        goal.scope = Goal.SCOPE_PERSONAL
+        goal.target_value = goal.personal_snapshot_target
+        goal.period = goal.personal_snapshot_period
+        goal.direction = goal.personal_snapshot_direction
+        goal.partnership = None
+        goal.proposed_by = None
+        goal.accepted = True
+        goal.is_active = True
+        _clear_personal_snapshot(goal)
+        goal.save(
+            update_fields=[
+                "scope",
+                "target_value",
+                "period",
+                "direction",
+                "partnership",
+                "proposed_by",
+                "accepted",
+                "is_active",
+                "personal_snapshot_target",
+                "personal_snapshot_period",
+                "personal_snapshot_direction",
+                "updated_at",
+            ]
+        )
+        return
+    goal.is_active = False
+    goal.partnership = None
+    goal.save(update_fields=["is_active", "partnership", "updated_at"])
+
+
+def _shared_copies(goal: Goal):
+    if not goal.partnership_id:
+        return [goal]
+    return list(
+        Goal.objects.filter(
+            partnership_id=goal.partnership_id,
+            scope=Goal.SCOPE_SHARED,
+            is_active=True,
+            category__name=goal.category.name,
+            category__type=goal.category.type,
+        ).select_related("category")
+    )
+
+
+def withdraw_together_proposal(goal: Goal) -> None:
+    """Stop a Together proposal. The proposer keeps it as a personal goal."""
+    related = _shared_copies(goal)
+    proposer_id = next((item.proposed_by_id for item in related if item.proposed_by_id), None)
+    if proposer_id is None:
+        proposer_id = goal.user_id
+    for item in related:
+        if item.user_id == proposer_id:
+            _keep_as_personal(item)
+        else:
+            _restore_or_drop_copy(item)
+
+
+def release_other_shared_copies(goal: Goal) -> None:
+    """When one person leaves a Together goal, settle the other person's copy."""
+    if goal.scope != Goal.SCOPE_SHARED or not goal.partnership_id:
+        return
+    others = [item for item in _shared_copies(goal) if item.pk != goal.pk]
+    for other in others:
+        if other.accepted and not other.personal_snapshot_period:
+            _keep_as_personal(other)
+        else:
+            _restore_or_drop_copy(other)
+
+
 def _upsert_goal_for_category(
     *,
     user,
@@ -134,6 +247,11 @@ def _upsert_goal_for_category(
     accepted: bool = True,
     proposed_by=None,
 ) -> tuple[Goal, bool]:
+    existing = Goal.objects.filter(user=user, category=category, is_active=True).first()
+    previously_personal = existing is not None and existing.scope != Goal.SCOPE_SHARED
+    snapshot = None
+    if previously_personal and existing is not None:
+        snapshot = (existing.target_value, existing.period, existing.direction)
     goal, created = Goal.objects.update_or_create(
         user=user,
         category=category,
@@ -149,24 +267,35 @@ def _upsert_goal_for_category(
             "template_slug": template_slug,
         },
     )
-    if created:
-        updates = []
-        if scope == Goal.SCOPE_SHARED:
-            goal.accepted = accepted
-            updates.append("accepted")
-            if proposed_by is not None:
-                goal.proposed_by = proposed_by
-                updates.append("proposed_by")
-        if updates:
-            updates.append("updated_at")
-            goal.save(update_fields=updates)
-    elif (
-        scope == Goal.SCOPE_SHARED
-        and proposed_by is not None
-        and goal.proposed_by_id is None
-    ):
+    if scope != Goal.SCOPE_SHARED:
+        return goal, created
+
+    proposer_id = getattr(proposed_by, "pk", None)
+    incoming = proposer_id is not None and proposer_id != user.id
+    updates: list[str] = []
+    if incoming and (created or previously_personal):
+        goal.accepted = False
+        updates.append("accepted")
+        if previously_personal and snapshot and not goal.personal_snapshot_period:
+            goal.personal_snapshot_target = snapshot[0]
+            goal.personal_snapshot_period = snapshot[1]
+            goal.personal_snapshot_direction = snapshot[2]
+            updates.extend(
+                [
+                    "personal_snapshot_target",
+                    "personal_snapshot_period",
+                    "personal_snapshot_direction",
+                ]
+            )
+    elif created or previously_personal:
+        goal.accepted = accepted
+        updates.append("accepted")
+    if proposed_by is not None and goal.proposed_by_id != proposer_id:
         goal.proposed_by = proposed_by
-        goal.save(update_fields=["proposed_by", "updated_at"])
+        updates.append("proposed_by")
+    if updates:
+        updates.append("updated_at")
+        goal.save(update_fields=list(dict.fromkeys(updates)))
     return goal, created
 
 
@@ -242,6 +371,9 @@ def apply_goal_templates(user, template_selections: list[dict], partnership=None
     created_goals = []
     updated_goals = []
     created_categories = []
+    from accounts.partnerships import partnership_is_paired
+
+    paired = partnership_is_paired(partnership)
 
     for selection in template_selections:
         slug = selection["slug"]
@@ -250,7 +382,7 @@ def apply_goal_templates(user, template_selections: list[dict], partnership=None
         if not isinstance(target_value, Decimal):
             target_value = Decimal(str(target_value))
         scope = selection.get("scope") or Goal.SCOPE_PERSONAL
-        if scope == Goal.SCOPE_SHARED and partnership is None:
+        if scope == Goal.SCOPE_SHARED and not paired:
             scope = Goal.SCOPE_PERSONAL
         period = selection.get("period") or template.period
         if period not in (Goal.PERIOD_WEEKLY, Goal.PERIOD_MONTHLY, Goal.PERIOD_DAILY):
@@ -410,11 +542,49 @@ def resolve_together_approvals(user, approve_uuids: list) -> None:
     )
     for goal in pending:
         if str(goal.uuid) in wanted:
-            goal.accepted = True
-            goal.save(update_fields=["accepted", "updated_at"])
+            accept_shared_goal(goal)
         else:
-            goal.is_active = False
-            goal.save(update_fields=["is_active", "updated_at"])
+            withdraw_together_proposal(goal)
+
+
+def list_pending_together_goals(user) -> list[dict]:
+    """Together goals that are proposed but not yet approved by both people."""
+    from accounts.partnerships import get_partner_user, get_user_partnership, partnership_is_paired
+    from goals.services import mutually_accepted_category_keys
+
+    partnership = get_user_partnership(user)
+    if not partnership_is_paired(partnership):
+        return []
+    partner = get_partner_user(user)
+    partner_name = partner.username if partner else ""
+    live = mutually_accepted_category_keys(partnership.id)
+    goals = Goal.objects.filter(
+        user=user,
+        partnership=partnership,
+        scope=Goal.SCOPE_SHARED,
+        is_active=True,
+    ).select_related("category", "proposed_by")
+    rows = []
+    for goal in goals:
+        if (goal.category.name, goal.category.type) in live:
+            continue
+        proposer = goal.proposed_by
+        rows.append(
+            {
+                "id": goal.id,
+                "uuid": goal.uuid,
+                "display_name": goal.display_name,
+                "category_name": goal.category.name,
+                "category_emoji": (goal.category.emoji or "").strip(),
+                "category_icon": goal.category.icon or "",
+                "target_label": _target_label(goal),
+                "period": goal.period,
+                "proposed_by_username": proposer.username if proposer else "",
+                "partner_username": partner_name,
+                "status": "needs_you" if not goal.accepted else "waiting_on_partner",
+            }
+        )
+    return rows
 
 
 def get_onboarding_status(user) -> dict:

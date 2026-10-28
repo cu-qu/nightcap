@@ -95,3 +95,17 @@ export type SetGoalInput = {
   direction?: "max" | "min";
   scope?: "personal" | "shared";
 };
+
+export type PendingTogetherGoal = {
+  id: number;
+  uuid: string;
+  display_name: string;
+  category_name: string;
+  category_emoji: string;
+  category_icon: string;
+  target_label: string;
+  period: "daily" | "weekly" | "monthly";
+  proposed_by_username: string;
+  partner_username: string;
+  status: "needs_you" | "waiting_on_partner";
+};

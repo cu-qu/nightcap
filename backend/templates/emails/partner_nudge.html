@@ -1,7 +1,7 @@
 {% extends "emails/base.html" %}
 
-{% block title %}Your partner nudged you{% endblock %}
-{% block preheader %}{{ from_username }} nudged you to finish NightCap for {{ day_label }}.{% endblock %}
+{% block title %}Your partner wants your NightCap{% endblock %}
+{% block preheader %}{{ from_username }} wants you to fill out your NightCap for {{ day_label }}!{% endblock %}
 {% block headline %}Time to close the day{% endblock %}
-{% block content %}{{ from_username }} nudged you to finish NightCap for {{ day_label }}. Open the app and log spend, habits, and a note.{% endblock %}
+{% block content %}{{ from_username }} wants you to fill out your NightCap for {{ day_label }}! Open the app and log spend, habits, and a note.{% endblock %}
 {% block note %}Your partner sent this because the day is still open.{% endblock %}

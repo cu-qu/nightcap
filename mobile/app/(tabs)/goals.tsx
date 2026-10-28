@@ -16,17 +16,20 @@ import { SetGoalSheet } from "@/src/components/SetGoalSheet";
 import { useGoalsStore } from "@/src/store/goalsStore";
 import { useGroupsStore } from "@/src/store/groupsStore";
 import { colors } from "@/src/theme/colors";
-import { iconFor } from "@/src/theme/iconMap";
-import type { GoalPeriod, GroupGoalItem } from "@/src/types/goals";
+import { categoryGlyph, iconFor } from "@/src/theme/iconMap";
+import type { GoalPeriod, GroupGoalItem, PendingTogetherGoal } from "@/src/types/goals";
 
 export default function GoalsScreen() {
   const summary = useGoalsStore((s) => s.summary);
+  const pending = useGoalsStore((s) => s.pending);
   const periodFilter = useGoalsStore((s) => s.period);
   const loading = useGoalsStore((s) => s.loading);
   const error = useGoalsStore((s) => s.error);
   const load = useGoalsStore((s) => s.load);
   const setPeriodFilter = useGoalsStore((s) => s.setPeriod);
   const setGoal = useGoalsStore((s) => s.setGoal);
+  const acceptPending = useGoalsStore((s) => s.acceptPending);
+  const declinePending = useGoalsStore((s) => s.declinePending);
   const deactivateGoal = useGoalsStore((s) => s.deactivateGoal);
   const refreshRitual = useGroupsStore((s) => s.refreshRitual);
   const refreshGroups = useGroupsStore((s) => s.refresh);
@@ -36,6 +39,7 @@ export default function GoalsScreen() {
   const [preferredGroupKey, setPreferredGroupKey] = useState<string | null>(
     null
   );
+  const [pendingBusy, setPendingBusy] = useState<number | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -68,6 +72,19 @@ export default function GoalsScreen() {
     setEditingGoal(null);
   }
 
+  async function respondToPending(
+    goal: PendingTogetherGoal,
+    decision: "approve" | "decline"
+  ) {
+    setPendingBusy(goal.id);
+    try {
+      if (decision === "approve") await acceptPending(goal.id);
+      else await declinePending(goal.id);
+    } finally {
+      setPendingBusy(null);
+    }
+  }
+
   const counts = summary?.counts;
 
   return (
@@ -94,8 +111,8 @@ export default function GoalsScreen() {
         }
       >
         <Text style={styles.intro}>
-          Stay under, pass a count, or complete habits. Shared goals count both
-          of you; personal ones stay just yours.
+          Stay under, pass a count, or complete habits. Together goals count
+          both of you after you each approve. Personal ones stay just yours.
         </Text>
 
         <View style={styles.segment}>
@@ -128,6 +145,24 @@ export default function GoalsScreen() {
           <ActivityIndicator color={colors.accent} style={{ marginTop: 24 }} />
         ) : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        {pending.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Needs approval</Text>
+            <Text style={styles.pendingLead}>
+              A together goal counts for both of you only after you each approve it.
+            </Text>
+            {pending.map((goal) => (
+              <PendingTogetherCard
+                key={goal.uuid}
+                goal={goal}
+                busy={pendingBusy === goal.id}
+                onApprove={() => void respondToPending(goal, "approve")}
+                onDecline={() => void respondToPending(goal, "decline")}
+              />
+            ))}
+          </View>
+        ) : null}
 
         {(summary?.groups ?? []).map((group) => (
           <View key={group.uuid ?? group.key ?? group.name} style={styles.section}>
@@ -177,6 +212,64 @@ export default function GoalsScreen() {
         </View>
       </ScrollView>
     </Screen>
+  );
+}
+
+function PendingTogetherCard({
+  goal,
+  busy,
+  onApprove,
+  onDecline,
+}: {
+  goal: PendingTogetherGoal;
+  busy: boolean;
+  onApprove: () => void;
+  onDecline: () => void;
+}) {
+  const waiting = goal.status === "waiting_on_partner";
+  const partner = goal.partner_username || "your partner";
+  const proposer = goal.proposed_by_username || "Your partner";
+  return (
+    <View style={styles.pendingCard}>
+      <View style={styles.topRow}>
+        <Text style={styles.pendingEmoji}>
+          {categoryGlyph({
+            emoji: goal.category_emoji,
+            icon: goal.category_icon,
+            name: goal.category_name || goal.display_name,
+          })}
+        </Text>
+        <View style={styles.sectionTitles}>
+          <Text style={styles.pendingName} numberOfLines={1}>
+            {goal.display_name}
+          </Text>
+          <Text style={styles.pendingMeta}>{goal.target_label}</Text>
+          <Text style={styles.pendingSub}>
+            {waiting
+              ? `Waiting for ${partner} to approve.`
+              : `${proposer} wants this together.`}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.pendingActions}>
+        {waiting ? (
+          <Pressable onPress={onDecline} disabled={busy} hitSlop={8}>
+            <Text style={styles.removeText}>
+              {busy ? "Canceling…" : "Cancel request"}
+            </Text>
+          </Pressable>
+        ) : (
+          <>
+            <Pressable onPress={onApprove} disabled={busy} hitSlop={8}>
+              <Text style={styles.editText}>{busy ? "Saving…" : "Approve"}</Text>
+            </Pressable>
+            <Pressable onPress={onDecline} disabled={busy} hitSlop={8}>
+              <Text style={styles.removeText}>{busy ? "Saving…" : "Not now"}</Text>
+            </Pressable>
+          </>
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -296,5 +389,62 @@ const styles = StyleSheet.create({
   },
   footerCta: {
     marginTop: 8,
+  },
+  pendingLead: {
+    marginTop: 4,
+    marginBottom: 10,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted,
+  },
+  pendingCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: colors.surface,
+    padding: 16,
+    marginBottom: 10,
+  },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  pendingEmoji: {
+    fontSize: 28,
+    marginTop: 2,
+  },
+  pendingName: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  pendingMeta: {
+    marginTop: 2,
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.accentSoft,
+  },
+  pendingSub: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted,
+  },
+  pendingActions: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  editText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.accentSoft,
+  },
+  removeText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.danger,
   },
 });

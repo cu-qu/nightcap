@@ -4,11 +4,13 @@ import * as goalsApi from "@/src/api/goals";
 import type {
   GoalPeriod,
   GroupGoalSummary,
+  PendingTogetherGoal,
   SetGoalInput,
 } from "@/src/types/goals";
 
 type GoalsState = {
   summary: GroupGoalSummary | null;
+  pending: PendingTogetherGoal[];
   period: GoalPeriod;
   lastFetched: number | null;
   loading: boolean;
@@ -18,11 +20,14 @@ type GoalsState = {
   refresh: () => Promise<void>;
   invalidate: () => Promise<void>;
   setGoal: (input: SetGoalInput) => Promise<void>;
+  acceptPending: (id: number) => Promise<void>;
+  declinePending: (id: number) => Promise<void>;
   deactivateGoal: (id: number) => Promise<void>;
 };
 
 export const useGoalsStore = create<GoalsState>((set, get) => ({
   summary: null,
+  pending: [],
   period: "weekly",
   lastFetched: null,
   loading: false,
@@ -37,7 +42,13 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     set({ loading: true, error: null, period: next });
     try {
       const summary = await goalsApi.getGroupSummary(next);
-      set({ summary, lastFetched: Date.now(), loading: false });
+      let pending = get().pending;
+      try {
+        pending = await goalsApi.getPendingGoals();
+      } catch {
+        // Keep the last list if the approval queue cannot be loaded.
+      }
+      set({ summary, pending, lastFetched: Date.now(), loading: false });
     } catch (e) {
       set({
         error: e instanceof Error ? e.message : "Failed to load goals",
@@ -56,6 +67,16 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
 
   setGoal: async (input) => {
     await goalsApi.setGoal(input);
+    await get().refresh();
+  },
+
+  acceptPending: async (id) => {
+    await goalsApi.acceptGoal(id);
+    await get().refresh();
+  },
+
+  declinePending: async (id) => {
+    await goalsApi.declineGoal(id);
     await get().refresh();
   },
 

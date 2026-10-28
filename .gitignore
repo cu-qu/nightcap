@@ -24,3 +24,4 @@ coverage/
 htmlcov/
 celerybeat-schedule
 expo-env.d.ts
+*.p8

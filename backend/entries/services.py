@@ -441,12 +441,20 @@ def _category_matches_group(category: TrackingCategory, group: str) -> bool:
 
 
 def _viewer_shared_categories(user) -> dict[tuple[str, str], TrackingCategory]:
+    from accounts.partnerships import get_user_partnership
     from goals.models import Goal
+    from goals.services import mutually_accepted_category_keys
 
+    partnership = get_user_partnership(user)
+    live_keys = mutually_accepted_category_keys(partnership.id if partnership else None)
     goals = Goal.objects.filter(
         user=user, is_active=True, scope=Goal.SCOPE_SHARED, accepted=True
     ).select_related("category", "category__group")
-    return {(goal.category.name, goal.category.type): goal.category for goal in goals}
+    return {
+        (goal.category.name, goal.category.type): goal.category
+        for goal in goals
+        if (goal.category.name, goal.category.type) in live_keys
+    }
 
 
 def _shared_category_ids(user) -> set[int]:
@@ -900,13 +908,17 @@ def shared_ritual_hints(user, ritual_date: date) -> dict:
     """
     from accounts.partnerships import get_user_partnership
     from goals.models import Goal
+    from goals.services import mutually_accepted_category_keys
 
     partnership = get_user_partnership(user)
-    shared_goals = list(
-        Goal.objects.filter(
+    live_keys = mutually_accepted_category_keys(partnership.id if partnership else None)
+    shared_goals = [
+        goal
+        for goal in Goal.objects.filter(
             user=user, is_active=True, scope=Goal.SCOPE_SHARED, accepted=True
         ).select_related("category")
-    )
+        if (goal.category.name, goal.category.type) in live_keys
+    ]
     shared_uuids = [goal.category.uuid for goal in shared_goals]
 
     if partnership is None:

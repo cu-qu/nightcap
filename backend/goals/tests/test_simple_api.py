@@ -91,6 +91,20 @@ class SimpleGoalApiTests(TestCase):
             1,
         )
 
+    def test_shared_goal_requires_a_paired_partner(self):
+        resp = self.client.post(
+            "/api/v1/goals/set/",
+            {
+                "category_uuid": str(self.groceries.uuid),
+                "target_value": "80.00",
+                "period": "monthly",
+                "scope": "shared",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn("Pair", str(resp.json()))
+
     def test_one_active_goal_per_category_not_both_periods(self):
         created = self.client.post(
             "/api/v1/goals/set/",

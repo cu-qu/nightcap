@@ -73,6 +73,15 @@ class Goal(models.Model):
         default=True,
         help_text="Together goals stay pending until the other person approves.",
     )
+    personal_snapshot_target = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Personal target saved when a goal is turned into a Together proposal.",
+    )
+    personal_snapshot_period = models.CharField(max_length=16, blank=True)
+    personal_snapshot_direction = models.CharField(max_length=8, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -11,6 +11,7 @@ from .serializers import (
     CategoryGroupGoalSummarySerializer,
     GoalProgressSerializer,
     GoalSerializer,
+    PendingTogetherGoalSerializer,
 )
 from .services import (
     compute_all_goal_progress,
@@ -93,6 +94,10 @@ class GoalViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         goal = self.get_object()
+        if goal.scope == Goal.SCOPE_SHARED:
+            from goals.onboarding_services import release_other_shared_copies
+
+            release_other_shared_copies(goal)
         goal.is_active = False
         goal.save(update_fields=["is_active", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -113,8 +118,63 @@ class GoalViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         goal.accepted = True
-        goal.save(update_fields=["accepted", "updated_at"])
+        from goals.onboarding_services import accept_shared_goal
+
+        accept_shared_goal(goal)
+        goal.refresh_from_db()
         return Response(self.get_serializer(goal).data)
+
+    @extend_schema(
+        tags=["Goals"],
+        summary="Decline a Together goal",
+        description=(
+            "Turn down a Together proposal. The person who suggested it keeps "
+            "the goal as a personal one."
+        ),
+        request=None,
+        responses={204: None},
+    )
+    @action(detail=True, methods=["post"], url_path="decline")
+    def decline(self, request, pk=None):
+        from goals.onboarding_services import withdraw_together_proposal
+        from goals.services import shared_goal_is_live
+
+        goal = self.get_object()
+        if goal.scope != Goal.SCOPE_SHARED:
+            return Response(
+                {"detail": "Only Together goals can be declined."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if shared_goal_is_live(goal):
+            return Response(
+                {"detail": "This together goal is already approved. Remove it instead."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        withdraw_together_proposal(goal)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        tags=["Goals"],
+        summary="Together goals waiting on approval",
+        description=(
+            "Shared goals can be proposed only after both accounts are paired. "
+            "They stay here until both people have approved."
+        ),
+        responses={200: PendingTogetherGoalSerializer(many=True)},
+    )
+    @action(detail=False, methods=["get"], url_path="pending")
+    def pending(self, request):
+        from accounts.partnerships import get_user_partnership, partnership_is_paired
+        from goals.onboarding_services import (
+            copy_shared_goals_to_user,
+            list_pending_together_goals,
+        )
+
+        partnership = get_user_partnership(request.user)
+        if partnership_is_paired(partnership):
+            copy_shared_goals_to_user(partnership, request.user)
+        payload = list_pending_together_goals(request.user)
+        return Response(PendingTogetherGoalSerializer(payload, many=True).data)
 
     @extend_schema(
         tags=["Goals"],

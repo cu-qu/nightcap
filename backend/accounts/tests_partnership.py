@@ -235,6 +235,15 @@ class PartnershipLeaveTests(TestCase):
             format="json",
         )
         self.assertEqual(join.status_code, 200, join.content)
+        proposed = self.client.post(
+            "/api/v1/onboarding/setup/",
+            {
+                "mode": "couple",
+                "templates": [{"slug": "groceries-monthly-max", "scope": "shared"}],
+            },
+            format="json",
+        )
+        self.assertEqual(proposed.status_code, 200, proposed.content)
         if accept_together:
             accept_pending_together(self.partner)
         return partner_client, code
@@ -440,7 +449,8 @@ class CoupleOnboardingTests(TestCase):
         self.assertIsNotNone(resp.json()["partnership"])
         groceries = Goal.objects.get(user=self.user, category__name="Groceries", is_active=True)
         workouts = Goal.objects.get(user=self.user, category__name="Workout", is_active=True)
-        self.assertEqual(groceries.scope, Goal.SCOPE_SHARED)
+        self.assertFalse(resp.json()["partnership"]["is_full"])
+        self.assertEqual(groceries.scope, Goal.SCOPE_PERSONAL)
         self.assertEqual(workouts.scope, Goal.SCOPE_PERSONAL)
 
     def test_templates_filtered_by_mode(self):
@@ -453,7 +463,7 @@ class CoupleOnboardingTests(TestCase):
         self.assertIn("date-night-monthly-max", couple_slugs)
         self.assertIn("groceries-monthly-max", solo_slugs)
 
-    def test_partner_inherits_shared_goals(self):
+    def test_partner_approves_shared_goal_after_pairing(self):
         setup = self.client.post(
             "/api/v1/onboarding/setup/",
             {
@@ -462,6 +472,11 @@ class CoupleOnboardingTests(TestCase):
             },
             format="json",
         )
+        self.assertEqual(setup.status_code, 200, setup.content)
+        self.assertFalse(setup.json()["partnership"]["is_full"])
+        owner_goal = Goal.objects.get(user=self.user, category__name="Groceries", is_active=True)
+        self.assertEqual(owner_goal.scope, Goal.SCOPE_PERSONAL)
+
         code = setup.json()["partnership"]["invite_code"]
         partner = User.objects.create_user(
             username="joiner",
@@ -477,6 +492,19 @@ class CoupleOnboardingTests(TestCase):
             format="json",
         )
         self.assertEqual(join.status_code, 200, join.content)
+        self.assertFalse(
+            Goal.objects.filter(user=partner, scope=Goal.SCOPE_SHARED, is_active=True).exists()
+        )
+
+        proposed = self.client.post(
+            "/api/v1/onboarding/setup/",
+            {
+                "mode": "couple",
+                "templates": [{"slug": "groceries-monthly-max", "scope": "shared"}],
+            },
+            format="json",
+        )
+        self.assertEqual(proposed.status_code, 200, proposed.content)
         pending = Goal.objects.get(
             user=partner,
             category__name="Groceries",
@@ -484,6 +512,25 @@ class CoupleOnboardingTests(TestCase):
             is_active=True,
         )
         self.assertFalse(pending.accepted)
+        owner_goal.refresh_from_db()
+        self.assertEqual(owner_goal.scope, Goal.SCOPE_SHARED)
+        self.assertTrue(owner_goal.accepted)
+
+        hidden = self.client.get("/api/v1/goals/group-summary/?period=monthly")
+        self.assertEqual(hidden.status_code, 200, hidden.content)
+        hidden_names = [
+            goal["category"]["name"]
+            for group in hidden.json()["groups"]
+            for goal in group["goals"]
+        ]
+        self.assertNotIn("Groceries", hidden_names)
+
+        waiting = self.client.get("/api/v1/goals/pending/")
+        self.assertEqual(waiting.status_code, 200, waiting.content)
+        self.assertEqual(waiting.json()[0]["status"], "waiting_on_partner")
+        needs_you = partner_client.get("/api/v1/goals/pending/")
+        self.assertEqual(needs_you.json()[0]["status"], "needs_you")
+
         status = partner_client.get("/api/v1/onboarding/status/")
         self.assertEqual(status.status_code, 200)
         together = status.json()["together_goals"]
@@ -502,6 +549,13 @@ class CoupleOnboardingTests(TestCase):
         self.assertEqual(setup_partner.status_code, 200, setup_partner.content)
         pending.refresh_from_db()
         self.assertTrue(pending.accepted)
+        visible = self.client.get("/api/v1/goals/group-summary/?period=monthly")
+        visible_names = [
+            goal["category"]["name"]
+            for group in visible.json()["groups"]
+            for goal in group["goals"]
+        ]
+        self.assertIn("Groceries", visible_names)
 
 
 class SharedGoalProgressTests(TestCase):
@@ -519,19 +573,9 @@ class SharedGoalProgressTests(TestCase):
         self.client.force_authenticate(user=self.a)
 
     def test_shared_progress_sums_both_partners(self):
-        setup = self.client.post(
-            "/api/v1/onboarding/setup/",
-            {
-                "mode": "couple",
-                "templates": [{"slug": "groceries-monthly-max", "scope": "shared"}],
-            },
-            format="json",
+        self._join_as_couple(
+            [{"slug": "groceries-monthly-max", "scope": "shared"}]
         )
-        code = setup.json()["partnership"]["invite_code"]
-        partner_client = APIClient()
-        partner_client.force_authenticate(user=self.b)
-        partner_client.post("/api/v1/partnership/join/", {"invite_code": code}, format="json")
-        accept_pending_together(self.b)
 
         cat_a = TrackingCategory.objects.get(user=self.a, name="Groceries")
         cat_b = TrackingCategory.objects.get(user=self.b, name="Groceries")
@@ -548,22 +592,12 @@ class SharedGoalProgressTests(TestCase):
         self.assertEqual(Decimal(str(row["progress"]["current_value"])), Decimal("65.00"))
 
     def test_ritual_shared_shows_partner_entry(self):
-        setup = self.client.post(
-            "/api/v1/onboarding/setup/",
-            {
-                "mode": "couple",
-                "templates": [
-                    {"slug": "groceries-monthly-max", "scope": "shared"},
-                    {"slug": "workouts-weekly-min", "scope": "personal"},
-                ],
-            },
-            format="json",
+        self._join_as_couple(
+            [
+                {"slug": "groceries-monthly-max", "scope": "shared"},
+                {"slug": "workouts-weekly-min", "scope": "personal"},
+            ]
         )
-        code = setup.json()["partnership"]["invite_code"]
-        partner_client = APIClient()
-        partner_client.force_authenticate(user=self.b)
-        partner_client.post("/api/v1/partnership/join/", {"invite_code": code}, format="json")
-        accept_pending_together(self.b)
 
         cat_a = TrackingCategory.objects.get(user=self.a, name="Groceries")
         cat_b = TrackingCategory.objects.get(user=self.b, name="Groceries")
@@ -600,6 +634,12 @@ class SharedGoalProgressTests(TestCase):
             format="json",
         )
         self.assertEqual(join.status_code, 200, join.content)
+        proposed = self.client.post(
+            "/api/v1/onboarding/setup/",
+            {"mode": "couple", "templates": templates},
+            format="json",
+        )
+        self.assertEqual(proposed.status_code, 200, proposed.content)
         accept_pending_together(self.b)
         return partner_client
 
@@ -775,3 +815,51 @@ class SharedGoalProgressTests(TestCase):
         rows = resp.json()["results"] if isinstance(resp.json(), dict) else resp.json()
         row = next(item for item in rows if item["category_detail"]["name"] == "Groceries")
         self.assertEqual(Decimal(str(row["progress"]["current_value"])), Decimal("80.00"))
+
+    def test_decline_restores_a_personal_goal(self):
+        self.client.post(
+            "/api/v1/onboarding/setup/",
+            {"mode": "couple", "templates": []},
+            format="json",
+        )
+        partnership = self.a.partnership_membership.partnership
+        partner_client = APIClient()
+        partner_client.force_authenticate(user=self.b)
+        partner_client.post(
+            "/api/v1/partnership/join/",
+            {"invite_code": partnership.invite_code},
+            format="json",
+        )
+        cat_b = TrackingCategory.objects.get(user=self.b, name="Groceries")
+        Goal.objects.create(
+            user=self.b,
+            category=cat_b,
+            period=Goal.PERIOD_MONTHLY,
+            direction=Goal.DIRECTION_MAX,
+            target_value=Decimal("40.00"),
+            scope=Goal.SCOPE_PERSONAL,
+        )
+        cat_a = TrackingCategory.objects.get(user=self.a, name="Groceries")
+        proposed = self.client.post(
+            "/api/v1/goals/set/",
+            {
+                "category_uuid": str(cat_a.uuid),
+                "target_value": "200.00",
+                "period": "monthly",
+                "scope": "shared",
+            },
+            format="json",
+        )
+        self.assertEqual(proposed.status_code, 201, proposed.content)
+        pending = Goal.objects.get(user=self.b, category=cat_b, is_active=True)
+        self.assertEqual(pending.scope, Goal.SCOPE_SHARED)
+        self.assertFalse(pending.accepted)
+        declined = partner_client.post(f"/api/v1/goals/{pending.id}/decline/")
+        self.assertEqual(declined.status_code, 204, declined.content)
+        pending.refresh_from_db()
+        self.assertTrue(pending.is_active)
+        self.assertEqual(pending.scope, Goal.SCOPE_PERSONAL)
+        self.assertEqual(pending.target_value, Decimal("40.00"))
+        owner = Goal.objects.get(user=self.a, category=cat_a, is_active=True)
+        self.assertEqual(owner.scope, Goal.SCOPE_PERSONAL)
+        self.assertEqual(owner.target_value, Decimal("200.00"))

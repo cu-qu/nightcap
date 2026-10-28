@@ -295,9 +295,10 @@ export default function SettingsScreen() {
             <>
               <Text style={styles.partnerName}>{other.username}</Text>
               <Text style={styles.partnerSub}>
-                Shared goals count both of you. Personal goals stay private.
-                Nudge them from Home or Calendar and they’ll get an iPhone
-                notification to finish that day’s NightCap.
+                Together goals count both of you after you each approve.
+                Personal goals stay private. Remind them from Home or Calendar
+                and they’ll get an iPhone notification to fill out that day’s
+                NightCap.
               </Text>
               {remindersSupported() && !notifyAllowed ? (
                 <PrimaryButton
@@ -389,7 +390,8 @@ export default function SettingsScreen() {
               <Text style={styles.partnerName}>Using NightCap alone</Text>
               <Text style={styles.partnerSub}>
                 Enter their code if they already have a couple space, or create
-                yours to invite them. Personal goals stay just yours.
+                yours to invite them. Together goals can be proposed once
+                you’re linked, and both of you approve them.
               </Text>
               <Text style={styles.emailLabel}>Their invite code</Text>
               <TextInput

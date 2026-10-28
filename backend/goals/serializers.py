@@ -159,6 +159,20 @@ class GoalCategorySummarySerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class PendingTogetherGoalSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    uuid = serializers.UUIDField()
+    display_name = serializers.CharField()
+    category_name = serializers.CharField()
+    category_emoji = serializers.CharField(allow_blank=True)
+    category_icon = serializers.CharField(allow_blank=True)
+    target_label = serializers.CharField()
+    period = serializers.CharField()
+    proposed_by_username = serializers.CharField(allow_blank=True)
+    partner_username = serializers.CharField(allow_blank=True)
+    status = serializers.ChoiceField(choices=["needs_you", "waiting_on_partner"])
+
+
 class GoalProgressSerializer(serializers.Serializer):
     goal_id = serializers.IntegerField()
     goal_uuid = serializers.UUIDField(required=False)
@@ -298,15 +312,13 @@ class GoalSerializer(serializers.ModelSerializer):
 
         scope = attrs.get("scope") or getattr(self.instance, "scope", Goal.SCOPE_PERSONAL)
         if scope == Goal.SCOPE_SHARED:
-            from accounts.partnerships import get_user_partnership
+            from accounts.partnerships import get_user_partnership, partnership_is_paired
 
             user = request.user if request is not None else getattr(self.instance, "user", None)
             partnership = get_user_partnership(user) if user is not None else None
-            if partnership is None:
+            if not partnership_is_paired(partnership):
                 raise serializers.ValidationError(
-                    {
-                        "scope": "Invite your partner first to share a goal."
-                    }
+                    {"scope": "Pair with your partner before sharing a goal."}
                 )
             attrs["partnership"] = partnership
         elif "scope" in attrs:
@@ -352,9 +364,27 @@ class GoalSerializer(serializers.ModelSerializer):
         return goal
 
     def update(self, instance, validated_data):
+        leaving_shared = (
+            instance.scope == Goal.SCOPE_SHARED
+            and validated_data.get("scope", instance.scope) == Goal.SCOPE_PERSONAL
+        )
+        if leaving_shared:
+            from goals.onboarding_services import release_other_shared_copies
+
+            release_other_shared_copies(instance)
         self._apply_scope_partnership(validated_data)
         goal = super().update(instance, validated_data)
+        if leaving_shared:
+            goal.proposed_by = None
+            goal.accepted = True
+            goal.save(update_fields=["proposed_by", "accepted", "updated_at"])
+            return goal
         if goal.scope == Goal.SCOPE_SHARED:
+            request = self.context.get("request")
+            if goal.proposed_by_id is None and request is not None:
+                goal.proposed_by = request.user
+                goal.accepted = True
+                goal.save(update_fields=["proposed_by", "accepted", "updated_at"])
             from goals.onboarding_services import mirror_shared_goal
 
             mirror_shared_goal(goal)

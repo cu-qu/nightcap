@@ -220,6 +220,32 @@ def combine_shared_day_values(day_entries: list[Entry], metric_kind: str) -> Dec
     )
 
 
+def mutually_accepted_category_keys(partnership_id: int | None) -> set[tuple[str, str]]:
+    """Category name + type pairs both partners have approved as Together."""
+    if not partnership_id:
+        return set()
+    rows = (
+        Goal.objects.filter(
+            partnership_id=partnership_id,
+            scope=Goal.SCOPE_SHARED,
+            is_active=True,
+            accepted=True,
+        )
+        .values("category__name", "category__type")
+        .annotate(people=Count("user_id", distinct=True))
+        .filter(people__gte=2)
+    )
+    return {(row["category__name"], row["category__type"]) for row in rows}
+
+
+def shared_goal_is_live(goal: Goal) -> bool:
+    if goal.scope != Goal.SCOPE_SHARED or not goal.accepted or not goal.partnership_id:
+        return False
+    return (goal.category.name, goal.category.type) in mutually_accepted_category_keys(
+        goal.partnership_id
+    )
+
+
 def partner_categories_for_goal(goal: Goal) -> list[tuple]:
     """Categories that roll into this goal (both partners when shared)."""
     if goal.scope != Goal.SCOPE_SHARED or not goal.partnership_id or not goal.accepted:
@@ -295,12 +321,24 @@ def compute_goal_progress(goal: Goal, reference_date: date | None = None) -> Goa
 
 
 def compute_all_goal_progress(user, reference_date: date | None = None) -> list[GoalProgress]:
+    from accounts.partnerships import get_user_partnership
+
+    partnership = get_user_partnership(user)
+    live_keys = mutually_accepted_category_keys(partnership.id if partnership else None)
     goals = (
         Goal.objects.filter(user=user, is_active=True)
         .exclude(scope=Goal.SCOPE_SHARED, accepted=False)
         .select_related("category", "partnership")
     )
-    return [compute_goal_progress(goal, reference_date) for goal in goals]
+    progress = []
+    for goal in goals:
+        if goal.scope == Goal.SCOPE_SHARED and (
+            goal.category.name,
+            goal.category.type,
+        ) not in live_keys:
+            continue
+        progress.append(compute_goal_progress(goal, reference_date))
+    return progress
 
 
 # Simple mobile health labels for goal cards / group summaries.
@@ -483,9 +521,15 @@ def compute_group_goal_summary(
     """
     from categories.models import CategoryGroup
 
+    from accounts.partnerships import get_user_partnership
+
     reference_date = reference_date or timezone.localdate()
     include_periods = _periods_for_filter(period)
     includes_weekly_rolled_in = period == Goal.PERIOD_MONTHLY
+    partnership = get_user_partnership(user)
+    live_shared_keys = mutually_accepted_category_keys(
+        partnership.id if partnership else None
+    )
 
     goals = (
         Goal.objects.filter(user=user, is_active=True)
@@ -549,6 +593,11 @@ def compute_group_goal_summary(
     all_rows: list[dict] = []
 
     for goal in goals:
+        if goal.scope == Goal.SCOPE_SHARED and (
+            goal.category.name,
+            goal.category.type,
+        ) not in live_shared_keys:
+            continue
         rolls_into_month = (
             includes_weekly_rolled_in and goal.period == Goal.PERIOD_WEEKLY
         )

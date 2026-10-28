@@ -507,24 +507,24 @@ class RitualApiTests(TestCase):
         )
         self.assertEqual(together.status_code, 200)
         together_names = {row["name"] for row in together.json()["by_category"]}
-        self.assertEqual(together_names, {"Groceries", "Workout"})
+        self.assertEqual(together_names, {"Workout"})
         together_day = next(
             p
             for p in together.json()["points"]
             if p["date"] == today.isoformat()
         )
-        self.assertEqual(together_day["expense_total"], "91.00")
+        self.assertEqual(together_day["expense_total"], "0.00")
 
         alone = self.client.get(
             "/api/v1/charts/", {**params, "with_filter": "alone"}
         )
         self.assertEqual(alone.status_code, 200)
         alone_names = {row["name"] for row in alone.json()["by_category"]}
-        self.assertEqual(alone_names, {"Fast Food", "Water"})
+        self.assertEqual(alone_names, {"Fast Food", "Water", "Groceries"})
         alone_day = next(
             p for p in alone.json()["points"] if p["date"] == today.isoformat()
         )
-        self.assertEqual(alone_day["expense_total"], "23.00")
+        self.assertEqual(alone_day["expense_total"], "114.00")
 
     def test_charts_include_linked_partner_together_entries(self):
         from accounts.partnerships import accept_invite_code, ensure_partnership

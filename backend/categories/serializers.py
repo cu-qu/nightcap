@@ -1,6 +1,33 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import CategoryGroup, TrackingCategory, default_metric_for_type
+
+
+def mirror_shared_category_metric(category: TrackingCategory) -> None:
+    """Keep a partner's copy of a Together category on the same measure."""
+    from accounts.partnerships import get_partner_user
+    from goals.models import Goal
+
+    if not Goal.objects.filter(
+        user=category.user,
+        category=category,
+        scope=Goal.SCOPE_SHARED,
+        is_active=True,
+    ).exists():
+        return
+    partner = get_partner_user(category.user)
+    if partner is None:
+        return
+    TrackingCategory.objects.filter(
+        user=partner,
+        name=category.name,
+        type=category.type,
+    ).exclude(pk=category.pk).update(
+        metric_kind=category.metric_kind,
+        unit=category.unit,
+        updated_at=timezone.now(),
+    )
 
 
 class TrackingCategorySerializer(serializers.ModelSerializer):
@@ -62,7 +89,30 @@ class TrackingCategorySerializer(serializers.ModelSerializer):
         elif "unit" not in attrs and not getattr(self.instance, "unit", None):
             _, unit = default_metric_for_type(category_type)
             attrs["unit"] = unit
+
+        group = attrs["group"] if "group" in attrs else getattr(self.instance, "group", None)
+        metric_kind = attrs.get(
+            "metric_kind", getattr(self.instance, "metric_kind", None)
+        )
+        unit = attrs.get("unit", getattr(self.instance, "unit", ""))
+        if group is not None and group.key == CategoryGroup.KEY_DAILY_SPEND:
+            if metric_kind != TrackingCategory.METRIC_AMOUNT or (
+                unit and unit != "usd"
+            ):
+                raise serializers.ValidationError(
+                    {"metric_kind": "Spend categories stay in dollars."}
+                )
         return attrs
+
+    def update(self, instance, validated_data):
+        metric_changed = (
+            validated_data.get("metric_kind", instance.metric_kind) != instance.metric_kind
+            or validated_data.get("unit", instance.unit) != instance.unit
+        )
+        category = super().update(instance, validated_data)
+        if metric_changed:
+            mirror_shared_category_metric(category)
+        return category
 
 
 class CategoryGroupSerializer(serializers.ModelSerializer):

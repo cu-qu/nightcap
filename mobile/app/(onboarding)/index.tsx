@@ -111,6 +111,8 @@ export default function OnboardingScreen() {
   const [emailSent, setEmailSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const shareGoals =
+    (mode === "couple" || startedPaired) && (startedPaired || !!linkedName);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,8 +154,9 @@ export default function OnboardingScreen() {
             if (next[template.slug]) continue;
             const suggest = mode === "couple" ? template.suggest_couple : template.suggest_solo;
             if (suggest) {
-              next[template.slug] =
-                mode === "couple" ? template.suggested_scope : "personal";
+              next[template.slug] = shareGoals
+                ? template.suggested_scope
+                : "personal";
               nextTargets[template.slug] = formatTemplateTarget(template.target_value);
               if (template.group === "finance") {
                 nextPeriods[template.slug] = "monthly";
@@ -179,7 +182,7 @@ export default function OnboardingScreen() {
     return () => {
       cancelled = true;
     };
-  }, [mode]);
+  }, [mode, shareGoals]);
 
   const byGroup = useMemo(() => {
     const groups: Record<GoalTemplateGroup, GoalTemplate[]> = {
@@ -263,7 +266,9 @@ export default function OnboardingScreen() {
         });
       } else {
         next[template.slug] =
-          couple && template.suggested_scope === "shared" ? "shared" : "personal";
+          shareGoals && template.suggested_scope === "shared"
+            ? "shared"
+            : "personal";
         setTargets((t) => ({
           ...t,
           [template.slug]:
@@ -442,7 +447,7 @@ export default function OnboardingScreen() {
         mode,
         templates: Object.entries(selected).map(([slug, scope]) => ({
           slug,
-          scope,
+          scope: shareGoals ? scope : "personal",
           ...(targets[slug] ? { target_value: targets[slug] } : {}),
           ...(periods[slug] ? { period: periods[slug] } : {}),
         })),
@@ -568,7 +573,7 @@ export default function OnboardingScreen() {
                   <View style={styles.cardText}>
                     <Text style={styles.cardTitle}>{linkedName}</Text>
                     <Text style={styles.cardBody}>
-                      Shared caps and habits count both of you.
+                      Together goals count both of you after you each approve.
                     </Text>
                   </View>
                 </View>
@@ -671,9 +676,11 @@ export default function OnboardingScreen() {
             <>
               <Text style={styles.title}>{STEP_COPY.finance.title}</Text>
               <Text style={styles.body}>
-                {couple
-                  ? `${STEP_COPY.finance.body} Shared caps count both of you.`
-                  : STEP_COPY.finance.body}
+                {shareGoals
+                  ? `${STEP_COPY.finance.body} Together caps count both of you after your partner approves.`
+                  : couple
+                    ? `${STEP_COPY.finance.body} These stay just yours until you’re linked. After that, either of you can propose a together goal and you both approve it.`
+                    : STEP_COPY.finance.body}
               </Text>
               <SpendLimitPicker
                 templates={byGroup.finance}
@@ -681,7 +688,7 @@ export default function OnboardingScreen() {
                 targets={targets}
                 periods={periods}
                 locked={locked}
-                couple={couple}
+                couple={shareGoals}
                 onToggle={toggle}
                 onScope={setScope}
                 onTarget={(slug, value) =>
@@ -696,9 +703,11 @@ export default function OnboardingScreen() {
             <>
               <Text style={styles.title}>{STEP_COPY.fitness.title}</Text>
               <Text style={styles.body}>
-                {couple
-                  ? `${STEP_COPY.fitness.body} Mark household ones as Together.`
-                  : STEP_COPY.fitness.body}
+                {shareGoals
+                  ? `${STEP_COPY.fitness.body} Together ones count both of you after your partner approves.`
+                  : couple
+                    ? `${STEP_COPY.fitness.body} These stay just yours until you’re linked.`
+                    : STEP_COPY.fitness.body}
               </Text>
               <MovementPicker
                 templates={byGroup.fitness}
@@ -706,7 +715,7 @@ export default function OnboardingScreen() {
                 targets={targets}
                 periods={periods}
                 locked={locked}
-                couple={couple}
+                couple={shareGoals}
                 onToggle={toggle}
                 onScope={setScope}
                 onTarget={(slug, value) =>
@@ -721,15 +730,17 @@ export default function OnboardingScreen() {
             <>
               <Text style={styles.title}>{STEP_COPY.habit.title}</Text>
               <Text style={styles.body}>
-                {couple
-                  ? `${STEP_COPY.habit.body} Mark household ones as Together.`
-                  : STEP_COPY.habit.body}
+                {shareGoals
+                  ? `${STEP_COPY.habit.body} Together ones count both of you after your partner approves.`
+                  : couple
+                    ? `${STEP_COPY.habit.body} These stay just yours until you’re linked.`
+                    : STEP_COPY.habit.body}
               </Text>
               <TemplatePicker
                 templates={byGroup.habit}
                 selected={selected}
                 locked={locked}
-                couple={couple}
+                couple={shareGoals}
                 onToggle={toggle}
                 onScope={setScope}
               />

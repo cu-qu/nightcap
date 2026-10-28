@@ -1,10 +1,20 @@
+import logging
+
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.iap import decode_apple_notification, serialize_catalog, verify_purchase
+from accounts.iap import (
+    decode_apple_notification,
+    serialize_catalog,
+    updates_from_apple_notification,
+    verify_purchase,
+)
+
+logger = logging.getLogger(__name__)
 from accounts.memberships import (
     apply_store_notification,
     apply_verified_purchase,
@@ -77,32 +87,26 @@ class AppleNotificationView(APIView):
         try:
             payload = decode_apple_notification(signed)
         except Exception:
+            logger.warning("Rejected an App Store notification with a bad signature.")
             return Response({"detail": "Invalid notification."}, status=status.HTTP_400_BAD_REQUEST)
 
-        renewal = payload.get("data") or payload
-        signed_txn = (
-            (renewal.get("signedTransactionInfo") if isinstance(renewal, dict) else None)
-            or payload.get("signedTransactionInfo")
-        )
-        if not signed_txn:
-            return Response({"ok": True})
-
-        from accounts.iap import verify_apple_jws
-
         try:
-            purchase = verify_apple_jws(signed_txn)
+            updates = updates_from_apple_notification(payload)
+        except ValidationError as exc:
+            logger.warning("Ignored an App Store notification: %s", exc.detail)
+            return Response({"ok": True})
         except Exception:
+            logger.exception("Could not read an App Store notification.")
+            return Response({"detail": "Invalid notification."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not updates:
             return Response({"ok": True})
 
-        notification_type = payload.get("notificationType") or ""
-        updates = {
-            "store_expires_at": purchase["expires_at"],
-            "auto_renewing": purchase.get("auto_renewing", True),
-            "product_id": purchase["product_id"],
-            "plan": purchase["plan"],
-            "latest_transaction_id": purchase.get("transaction_id") or "",
-        }
-        if notification_type in {"EXPIRED", "REFUND", "REVOKE"}:
-            updates["auto_renewing"] = False
-        apply_store_notification(purchase["original_transaction_id"], updates)
+        original = updates.pop("original_transaction_id")
+        membership = apply_store_notification(original, updates)
+        if membership is None:
+            logger.info(
+                "App Store notification %s did not match a NightCap membership.",
+                payload.get("notificationType") or "unknown",
+            )
         return Response({"ok": True})

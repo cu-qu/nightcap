@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -19,7 +19,12 @@ import { useAuthStore } from "@/src/store/authStore";
 import { useGroupsStore } from "@/src/store/groupsStore";
 import { colors } from "@/src/theme/colors";
 import { categoryGlyph, iconFor } from "@/src/theme/iconMap";
-import type { ChartCategory, ChartGroup, ChartResponse } from "@/src/types/api";
+import type {
+  ChartCategory,
+  ChartGroup,
+  ChartPoint,
+  ChartResponse,
+} from "@/src/types/api";
 import { SPEND_GROUP_KEY } from "@/src/types/api";
 import type { GoalPeriod, GroupGoalItem } from "@/src/types/goals";
 import {
@@ -45,7 +50,88 @@ import {
   seriesForFilter,
   uniqueCategoryColors,
 } from "@/src/utils/chartMetrics";
-import { monthLabel, todayIso, toIsoDate } from "@/src/utils/date";
+import {
+  endOfWeek,
+  isFutureIsoDate,
+  monthLabel,
+  parseIsoDate,
+  startOfWeek,
+  todayIso,
+  toIsoDate,
+  weekRangeLabel,
+} from "@/src/utils/date";
+
+function weekDates(startIso: string): string[] {
+  const start = parseIsoDate(startIso);
+  return Array.from({ length: 7 }, (_, i) =>
+    toIsoDate(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i))
+  );
+}
+
+function chartRange(
+  period: "daily" | "weekly",
+  year: number,
+  month: number,
+  weekStartIso: string
+): { start: string; end: string; includeGoals: boolean } {
+  const now = new Date();
+  if (period === "daily") {
+    const startDate = parseIsoDate(weekStartIso);
+    const start = toIsoDate(startDate);
+    const end = toIsoDate(endOfWeek(startDate));
+    const monthStart = toIsoDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    const monthEnd = toIsoDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    return {
+      start,
+      end,
+      includeGoals: start <= monthEnd && end >= monthStart,
+    };
+  }
+  const start = `${year}-${String(month).padStart(2, "0")}-01`;
+  const endIso = toIsoDate(new Date(year, month, 0));
+  const today = todayIso();
+  const end = today < endIso && today >= start ? today : endIso;
+  const includeGoals =
+    year === now.getFullYear() && month === now.getMonth() + 1;
+  return { start, end, includeGoals };
+}
+
+function plottedPoints(
+  period: "daily" | "weekly",
+  points: ChartPoint[],
+  weekStartIso: string
+): ChartPoint[] {
+  if (period !== "daily") return points;
+  const byDate = new Map(
+    points.filter((p) => p.date).map((p) => [p.date as string, p])
+  );
+  return weekDates(weekStartIso).map(
+    (iso) =>
+      byDate.get(iso) ?? {
+        date: iso,
+        entry_count: 0,
+        expense_total: "0",
+        income_total: "0",
+        together_count: 0,
+        alone_count: 0,
+      }
+  );
+}
+
+function dayParts(iso: string): {
+  label: string;
+  sublabel: string;
+  dim: boolean;
+  today: boolean;
+} {
+  const date = parseIsoDate(iso);
+  return {
+    label: date.toLocaleDateString(undefined, { weekday: "short" }),
+    sublabel: String(date.getDate()),
+    dim: isFutureIsoDate(iso),
+    today: iso === todayIso(),
+  };
+}
 
 export default function ChartsScreen() {
   const router = useRouter();
@@ -56,6 +142,9 @@ export default function ChartsScreen() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const [weekStartIso, setWeekStartIso] = useState(() =>
+    toIsoDate(startOfWeek(new Date()))
+  );
   const [period, setPeriod] = useState<"daily" | "weekly">("daily");
   const [filterId, setFilterId] = useState(ALL_FILTER);
   const [data, setData] = useState<ChartResponse | null>(null);
@@ -63,10 +152,16 @@ export default function ChartsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestSeq = useRef(0);
 
   const goalPeriod: GoalPeriod = period === "weekly" ? "weekly" : "monthly";
   const isCurrentMonth =
     year === now.getFullYear() && month === now.getMonth() + 1;
+  const currentWeekIso = toIsoDate(startOfWeek(now));
+  const isCurrentWeek = weekStartIso >= currentWeekIso;
+  const range = chartRange(period, year, month, weekStartIso);
+  const atRangeEnd = period === "daily" ? isCurrentWeek : isCurrentMonth;
+  const rangeNoun = period === "daily" ? "this week" : "this month";
 
   function shiftMonth(delta: number) {
     const d = new Date(year, month - 1 + delta, 1);
@@ -82,8 +177,45 @@ export default function ChartsScreen() {
     setMonth(nextM);
   }
 
+  function shiftWeek(delta: number) {
+    const next = parseIsoDate(weekStartIso);
+    next.setDate(next.getDate() + delta * 7);
+    const nextIso = toIsoDate(next);
+    if (nextIso > currentWeekIso) return;
+    setWeekStartIso(nextIso);
+  }
+
+  function shiftRange(delta: number) {
+    if (delta > 0 && atRangeEnd) return;
+    if (period === "daily") shiftWeek(delta);
+    else shiftMonth(delta);
+  }
+
+  function selectPeriod(next: "daily" | "weekly") {
+    if (next === period) return;
+    if (next === "daily") {
+      const today = new Date();
+      const viewingCurrent =
+        year === today.getFullYear() && month === today.getMonth() + 1;
+      const anchor = viewingCurrent ? today : new Date(year, month - 1, 1);
+      setWeekStartIso(toIsoDate(startOfWeek(anchor)));
+    } else {
+      const start = parseIsoDate(weekStartIso);
+      setYear(start.getFullYear());
+      setMonth(start.getMonth() + 1);
+    }
+    setPeriod(next);
+  }
+
   const load = useCallback(
-    async (p: "daily" | "weekly", groupId: string, y: number, m: number) => {
+    async (
+      p: "daily" | "weekly",
+      groupId: string,
+      start: string,
+      end: string,
+      includeGoals: boolean
+    ) => {
+        const seq = ++requestSeq.current;
         setError(null);
         setData(null);
         try {
@@ -93,11 +225,6 @@ export default function ChartsScreen() {
             groupId === ALONE_FILTER
               ? undefined
               : groupId;
-          const start = `${y}-${String(m).padStart(2, "0")}-01`;
-          const last = new Date(y, m, 0);
-          const endIso = toIsoDate(last);
-          const today = todayIso();
-          const end = today < endIso && today >= start ? today : endIso;
           const withFilter =
             groupId === TOGETHER_FILTER
               ? "together"
@@ -110,10 +237,9 @@ export default function ChartsScreen() {
             endDate: end,
             withFilter,
           });
+          if (seq !== requestSeq.current) return;
           setData(charts);
-          const current =
-            y === new Date().getFullYear() && m === new Date().getMonth() + 1;
-          if (!current) {
+          if (!includeGoals) {
             setGoals([]);
             return;
           }
@@ -121,6 +247,7 @@ export default function ChartsScreen() {
             const summary = await getGroupSummary(
               p === "weekly" ? "weekly" : "monthly"
             );
+            if (seq !== requestSeq.current) return;
             const buckets = summary.groups ?? [];
             const allGoals = buckets.flatMap((g) => g.goals);
             const matching =
@@ -135,9 +262,10 @@ export default function ChartsScreen() {
                         .flatMap((g) => g.goals);
             setGoals(matching);
           } catch {
-            setGoals([]);
+            if (seq === requestSeq.current) setGoals([]);
           }
         } catch (e) {
+          if (seq !== requestSeq.current) return;
           setError(e instanceof Error ? e.message : "Failed to load charts");
         }
     },
@@ -154,7 +282,7 @@ export default function ChartsScreen() {
       setLoading(true);
       void (async () => {
         try {
-          await load(period, filterId, year, month);
+          await load(period, filterId, range.start, range.end, range.includeGoals);
         } finally {
           if (active) setLoading(false);
         }
@@ -162,17 +290,24 @@ export default function ChartsScreen() {
       return () => {
         active = false;
       };
-    }, [period, filterId, year, month, load])
+    }, [period, filterId, range.start, range.end, range.includeGoals, load])
   );
 
   async function onRefresh() {
     setRefreshing(true);
     try {
-      await load(period, filterId, year, month);
+      await load(period, filterId, range.start, range.end, range.includeGoals);
     } finally {
       setRefreshing(false);
     }
   }
+
+  const chart =
+    data &&
+    data.period === period &&
+    data.start_date.slice(0, 10) === range.start
+      ? data
+      : null;
 
   const filterChips = useMemo(() => {
     const chips = [
@@ -185,33 +320,33 @@ export default function ChartsScreen() {
         }))
         .filter((c) => c.id),
     ];
-    if (hasPartner || (data?.together?.together_count || 0) + (data?.together?.alone_count || 0) > 0) {
+    if (hasPartner || (chart?.together?.together_count || 0) + (chart?.together?.alone_count || 0) > 0) {
       chips.push({ id: TOGETHER_FILTER, label: "Together" });
       chips.push({ id: ALONE_FILTER, label: "Solo" });
     }
     return chips;
-  }, [groups, hasPartner, data?.together]);
+  }, [groups, hasPartner, chart?.together]);
 
   const series = useMemo(
-    () => seriesForFilter(filterId, data?.points ?? []),
-    [filterId, data]
+    () => seriesForFilter(filterId, chart?.points ?? []),
+    [filterId, chart]
   );
 
   const colorMap = useMemo(() => {
     const ids: string[] = [];
-    for (const cat of data?.by_category ?? []) {
+    for (const cat of chart?.by_category ?? []) {
       ids.push(categoryColorId(cat));
     }
-    for (const point of data?.points ?? []) {
+    for (const point of chart?.points ?? []) {
       for (const seg of point.by_category ?? []) {
         ids.push(categoryColorId(seg));
       }
     }
     return uniqueCategoryColors(ids);
-  }, [data]);
+  }, [chart]);
 
   const barPoints = useMemo(() => {
-    const points = data?.points ?? [];
+    const points = plottedPoints(period, chart?.points ?? [], weekStartIso);
     return points.map((p, i) => {
       const iso = period === "weekly" ? p.week_start : p.date;
       const value = pointValue(p, series);
@@ -226,26 +361,34 @@ export default function ChartsScreen() {
         })
         .filter((seg) => seg.value > 0)
         .sort((a, b) => a.value - b.value);
+      const day = period === "daily" && iso ? dayParts(iso) : null;
       return {
         key: iso || `${period}-${i}`,
-        label: axisLabel(iso, period),
+        label: day?.label ?? axisLabel(iso, period),
+        sublabel: day?.sublabel,
+        dim: day?.dim,
+        today: day?.today,
         value,
         display: formatBarValue(value, series),
         segments,
       };
     });
-  }, [data, period, series, colorMap]);
+  }, [chart, period, series, colorMap, weekStartIso]);
 
   const togetherBarPoints = useMemo(() => {
-    const points = data?.points ?? [];
+    const points = plottedPoints(period, chart?.points ?? [], weekStartIso);
     return points.map((p, i) => {
       const iso = period === "weekly" ? p.week_start : p.date;
       const togetherN = p.together_count || 0;
       const aloneN = p.alone_count || 0;
       const value = togetherN + aloneN;
+      const day = period === "daily" && iso ? dayParts(iso) : null;
       return {
         key: `with-${iso || `${period}-${i}`}`,
-        label: axisLabel(iso, period),
+        label: day?.label ?? axisLabel(iso, period),
+        sublabel: day?.sublabel,
+        dim: day?.dim,
+        today: day?.today,
         value,
         display: value ? String(value) : "",
         segments: [
@@ -254,14 +397,17 @@ export default function ChartsScreen() {
         ].filter((s) => s.value > 0),
       };
     });
-  }, [data, period]);
+  }, [chart, period, weekStartIso]);
 
-  const rangeLabel = monthLabel(year, month);
+  const rangeLabel =
+    period === "daily"
+      ? weekRangeLabel(parseIsoDate(range.start), parseIsoDate(range.end))
+      : monthLabel(year, month);
 
   const totalsLine = useMemo(() => {
-    if (!data) return "";
+    if (!chart) return "";
     const parts: string[] = [];
-    const spend = (data.by_group ?? []).reduce(
+    const spend = (chart.by_group ?? []).reduce(
       (s, g) => s + (Number(g.expense_total) || 0),
       0
     );
@@ -271,7 +417,7 @@ export default function ChartsScreen() {
       (spend > 0 && series.kind === "spend");
     if (showSpend && spend) parts.push(formatSpendDelta(spend));
     const unitTotals = new Map<string, number>();
-    for (const cat of data.by_category ?? []) {
+    for (const cat of chart.by_category ?? []) {
       if (cat.metric_kind === "amount" || cat.metric_kind === "boolean") continue;
       const q = Number(cat.quantity_total) || 0;
       if (!q) continue;
@@ -283,9 +429,9 @@ export default function ChartsScreen() {
       if (line) parts.push(line);
     }
     return parts.join(" · ");
-  }, [data, filterId, series.kind]);
+  }, [chart, filterId, series.kind]);
 
-  const together = data?.together;
+  const together = chart?.together;
   const showTogetherChart =
     filterId !== TOGETHER_FILTER &&
     filterId !== ALONE_FILTER &&
@@ -293,7 +439,7 @@ export default function ChartsScreen() {
       (hasPartner && togetherBarPoints.some((p) => p.value > 0)));
 
   const categories = useMemo(() => {
-    const rows = [...(data?.by_category ?? [])]
+    const rows = [...(chart?.by_category ?? [])]
       .map((cat) => ({ cat, display: categoryDisplay(cat) }))
       .filter((row) => row.display.label);
     rows.sort(
@@ -302,9 +448,9 @@ export default function ChartsScreen() {
         b.display.value - a.display.value
     );
     return rows;
-  }, [data]);
+  }, [chart]);
 
-  const byGroup = data?.by_group ?? [];
+  const byGroup = chart?.by_group ?? [];
 
   const legendItems = useMemo(() => {
     return categories
@@ -346,7 +492,7 @@ export default function ChartsScreen() {
         }
       >
         <Text style={styles.intro}>
-          Spend, habits, and together time — by day or week, and by group.
+          Spend, habits, and together time — a week of days, or the month by week.
         </Text>
 
         <View style={styles.segment}>
@@ -355,7 +501,7 @@ export default function ChartsScreen() {
             return (
               <Pressable
                 key={p}
-                onPress={() => setPeriod(p)}
+                onPress={() => selectPeriod(p)}
                 style={[styles.segBtn, on && styles.segBtnOn]}
               >
                 <Text style={[styles.segText, on && styles.segTextOn]}>
@@ -390,18 +536,27 @@ export default function ChartsScreen() {
         {rangeLabel || totalsLine ? (
           <View style={styles.banner}>
             <View style={styles.monthNav}>
-              <Pressable onPress={() => shiftMonth(-1)} style={styles.navBtn}>
+              <Pressable
+                onPress={() => shiftRange(-1)}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  period === "daily" ? "Previous week" : "Previous month"
+                }
+                style={styles.navBtn}
+              >
                 <Text style={styles.navText}>‹</Text>
               </Pressable>
               <Text style={styles.bannerLabel}>{rangeLabel}</Text>
               <Pressable
-                onPress={() => shiftMonth(1)}
-                disabled={isCurrentMonth}
-                style={[styles.navBtn, isCurrentMonth && styles.navBtnOff]}
+                onPress={() => shiftRange(1)}
+                disabled={atRangeEnd}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  period === "daily" ? "Next week" : "Next month"
+                }
+                style={[styles.navBtn, atRangeEnd && styles.navBtnOff]}
               >
-                <Text
-                  style={[styles.navText, isCurrentMonth && styles.navTextOff]}
-                >
+                <Text style={[styles.navText, atRangeEnd && styles.navTextOff]}>
                   ›
                 </Text>
               </Pressable>
@@ -415,23 +570,27 @@ export default function ChartsScreen() {
               >
                 {totalsLine}
               </Text>
-            ) : (
+            ) : chart ? (
               <Text style={styles.bannerQuiet}>
                 {filterId === TOGETHER_FILTER
-                  ? "No together activity in this range"
+                  ? `No together activity ${rangeNoun}`
                   : filterId === ALONE_FILTER
-                    ? "No solo activity in this range"
-                    : "No activity in this range"}
+                    ? `No solo activity ${rangeNoun}`
+                    : `No activity ${rangeNoun}`}
               </Text>
-            )}
-            <Text style={styles.seriesTitle}>{series.title}</Text>
+            ) : null}
+            {chart ? (
+              <Text style={styles.seriesTitle}>{series.title}</Text>
+            ) : null}
           </View>
         ) : null}
 
-        {loading && !data ? (
-          <ActivityIndicator color={colors.accent} style={{ marginTop: 24 }} />
-        ) : error ? (
-          <Text style={styles.error}>{error}</Text>
+        {!chart ? (
+          error ? (
+            <Text style={styles.error}>{error}</Text>
+          ) : (
+            <ActivityIndicator color={colors.accent} style={{ marginTop: 24 }} />
+          )
         ) : (
           <>
             <ChartBars
@@ -529,7 +688,7 @@ export default function ChartsScreen() {
               </View>
             ) : null}
 
-            {isCurrentMonth ? (
+            {range.includeGoals ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>
@@ -542,19 +701,16 @@ export default function ChartsScreen() {
                 </Pressable>
               </View>
               {goals.length ? (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.pills}
-                >
+                <View style={styles.goalList}>
                   {goals.map((goal) => (
                     <GoalHealthPill
                       key={goal.uuid}
                       goal={goal}
+                      fullWidth
                       onPress={() => router.push("/(tabs)/goals")}
                     />
                   ))}
-                </ScrollView>
+                </View>
               ) : (
                 <Text style={styles.quiet}>
                   {filterId === ALL_FILTER
@@ -918,9 +1074,8 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 20,
   },
-  pills: {
+  goalList: {
     gap: 8,
-    paddingVertical: 2,
   },
   groupRow: {
     flexDirection: "row",

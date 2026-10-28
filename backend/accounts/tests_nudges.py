@@ -129,8 +129,11 @@ class PartnerNudgeTests(TestCase):
         self.assertNotIn("email", resp.json()["nudge"]["delivered_via"])
         mock_push.assert_called_once()
         mock_send.assert_not_called()
-        self.assertEqual(mock_push.call_args.kwargs["title"], "owner nudged you 🌙")
-        self.assertIn("NightCap", mock_push.call_args.kwargs["body"])
+        self.assertEqual(mock_push.call_args.kwargs["title"], "NightCap")
+        self.assertEqual(
+            mock_push.call_args.kwargs["body"],
+            "owner wants you to fill out your NightCap for today!",
+        )
 
     def test_calendar_includes_partner_and_nudge_state(self):
         NightCap.objects.create(
