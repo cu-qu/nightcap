@@ -423,6 +423,7 @@ export type RecapSlideType =
   | "stat"
   | "photos"
   | "moments"
+  | "moment"
   | "logged"
   | "moods"
   | "together"
@@ -442,6 +443,14 @@ export type RecapMoment = {
   mood: string;
   has_photo: boolean;
   photo_url?: string | null;
+  author?: string;
+  author_id?: string;
+  nightcap_uuid?: string;
+};
+
+export type RecapPerson = {
+  id: string;
+  name: string;
 };
 
 export type RecapMood = {
@@ -504,6 +513,8 @@ export type RecapMonthResponse = {
   year: number;
   month: number;
   title: string;
+  shared: boolean;
+  people: RecapPerson[];
   snapshot: RecapSnapshot;
   slides: RecapSlide[];
 };
@@ -512,6 +523,8 @@ export type RecapYearResponse = {
   kind: "year";
   year: number;
   title: string;
+  shared: boolean;
+  people: RecapPerson[];
   snapshot: RecapSnapshot;
   seasons: RecapSeason[];
   slides: RecapSlide[];
@@ -532,6 +545,7 @@ export type RecapYearSummary = {
 
 export type RecapIndexResponse = {
   highlight_days: number;
+  shared: boolean;
   featured_month: RecapMonthSummary | null;
   featured_year: RecapYearSummary | null;
   months: RecapMonthSummary[];

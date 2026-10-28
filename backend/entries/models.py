@@ -205,3 +205,57 @@ class DayReflection(models.Model):
 
     def __str__(self):
         return f"{self.user_id} {self.date}"
+
+
+class MonthlyRecap(models.Model):
+    """Month slideshow frozen on the 1st. Shared by a couple, or owned by one person."""
+
+    partnership = models.ForeignKey(
+        "accounts.Partnership",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="monthly_recaps",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="monthly_recaps",
+    )
+    year = models.PositiveSmallIntegerField()
+    month = models.PositiveSmallIntegerField()
+    highlight_uuids = models.JSONField(
+        default=list,
+        help_text="NightCap UUIDs in slideshow order. Up to five moments per person.",
+    )
+    generated_at = models.DateTimeField(auto_now_add=True)
+    notified_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "entries_monthlyrecap"
+        ordering = ["-year", "-month"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(partnership__isnull=False, user__isnull=True)
+                    | models.Q(partnership__isnull=True, user__isnull=False)
+                ),
+                name="monthly_recap_owner_xor",
+            ),
+            models.UniqueConstraint(
+                fields=["partnership", "year", "month"],
+                condition=models.Q(partnership__isnull=False),
+                name="unique_monthly_recap_partnership",
+            ),
+            models.UniqueConstraint(
+                fields=["user", "year", "month"],
+                condition=models.Q(user__isnull=False),
+                name="unique_monthly_recap_user",
+            ),
+        ]
+
+    def __str__(self):
+        owner = self.partnership_id or self.user_id
+        return f"Recap {self.year}-{self.month:02d} ({owner})"

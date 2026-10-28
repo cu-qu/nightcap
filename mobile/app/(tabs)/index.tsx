@@ -228,11 +228,11 @@ export default function HomeScreen() {
                 : `${recaps.featured_year?.title} Recap`}
             </Text>
             <Text style={styles.ritualBody}>
-              Photos, favorite moments, and what you logged last
               {recaps.featured_year && !recaps.featured_month
-                ? " year"
-                : " month"}
-              . Available here for the first week.
+                ? "Photos and moments from the year. Available here for the first week."
+                : recaps.shared
+                  ? "A shared slideshow — top moments from each of you, in order. Available here for the first week."
+                  : "A slideshow of your top moments from the month. Available here for the first week."}
             </Text>
             {recaps.featured_month ? (
               <PrimaryButton

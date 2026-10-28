@@ -260,12 +260,20 @@ Response includes `points[]` (`date` or `week_start`, totals, `entry_count`) and
 
 Story-style look-backs assembled from NightCaps (photos, favorite moments, moods) and daily check-in entries.
 
-`GET /api/v1/recaps/` — index of **past** months/years that have NightCaps. `featured_month` is last month during the first 7 days of a new month; `featured_year` is last year during Jan 1–7. Otherwise those fields are `null`. Current month is never listed.
+When two people are linked, month and year recaps are **shared**: both partners see the same slideshow, including each other's moments. `shared` is `true` and `people` lists both names. Solo members get their own recap.
+
+Each month slideshow summarizes the nights (cover, totals, what you logged, moods), then one slide per highlight. Highlights are the **top 5 moments per person** — preferring a photo, a written favorite moment, and a stronger mood — shown with that photo in chronological order. Slide type is `moment` (`moments[]` has one item, with `author`, `author_id`, `nightcap_uuid`, and `photo_url`).
+
+`GET /api/v1/recaps/moments/{nightcap_uuid}/photo/` streams that photo for the owner or their linked partner. On Cloudflare R2, `photo_url` is a signed object URL instead.
+
+On the 1st of each month at 08:00 UTC, Celery beat runs `entries.tasks.generate_previous_month_recaps` for every **active** couple (one shared row) and every **active** solo member who logged the month that just ended. It freezes the highlight list and sends an Apple push when a device token is registered. The same job is `python manage.py generate_monthly_recaps` (optional `--year` and `--month`).
+
+`GET /api/v1/recaps/` — index of **past** months/years that have NightCaps. For a couple this includes nights either person logged. `featured_month` is last month during the first 7 days of a new month; `featured_year` is last year during Jan 1–7. Otherwise those fields are `null`. Current month is never listed. `shared` mirrors the caller's couple link.
 
 Home shows the featured recap for that first week. Settings → Recaps lists every past month and year.
 
 `GET /api/v1/recaps/month/?year=2026&month=8`  
-Defaults to the current month. Future months return an empty snapshot.
+Defaults to the current month. Future months return an empty snapshot. A closed month is stored the first time it is built so both partners keep the same five moments.
 
 ```json
 {
@@ -283,10 +291,10 @@ Defaults to the current month. Future months return an empty snapshot.
         "date": "2026-08-03",
         "favorite_moment": "Sunset on the walk home.",
         "mood": "🙂",
-        "photo_url": "http://localhost:8000/api/v1/nightcaps/2026-08-03/photo/?t=…"
+        "photo_url": "http://localhost:8000/api/v1/recaps/moments/<nightcap-uuid>/photo/?t=…"
       }
     ],
-    "moments": [{ "date": "2026-08-03", "text": "Sunset on the walk home.", "mood": "🙂", "has_photo": true }],
+    "moments": [{ "date": "2026-08-03", "text": "Sunset on the walk home.", "mood": "🙂", "has_photo": true, "author": "Alex" }],
     "moods": [{ "mood": "🙂", "count": 12 }],
     "categories": [
       {
@@ -303,7 +311,7 @@ Defaults to the current month. Future months return an empty snapshot.
   },
   "slides": [
     { "type": "cover", "eyebrow": "Month Recap", "title": "August 2026" },
-    { "type": "photos", "title": "Favorite frames", "photos": [] }
+    { "type": "moment", "eyebrow": "Alex", "title": "Sunset on the walk home.", "moments": [], "photos": [] }
   ]
 }
 ```

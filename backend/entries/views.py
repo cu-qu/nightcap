@@ -8,6 +8,7 @@ from django.db.models.functions import TruncDate
 from django.http import FileResponse
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -47,7 +48,12 @@ from .serializers import (
     RitualResponseSerializer,
     SharedRitualResponseSerializer,
 )
-from .recaps import build_month_recap, build_year_recap, list_available_recaps
+from .recaps import (
+    build_month_recap,
+    build_year_recap,
+    list_available_recaps,
+    viewer_can_see_nightcap,
+)
 from .services import (
     build_daily_summary,
     calendar_month,
@@ -494,16 +500,7 @@ class NightCapViewSet(viewsets.ModelViewSet):
                     {"detail": "No photo for this day."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
-            photo = nightcap.favorite_photo
-            content_type = (
-                mimetypes.guess_type(photo.name)[0] or "image/jpeg"
-            )
-            return FileResponse(
-                photo.open("rb"),
-                as_attachment=False,
-                filename=Path(photo.name).name,
-                content_type=content_type,
-            )
+            return _photo_file_response(nightcap)
 
         nightcap = get_or_create_nightcap(request.user, nightcap_date)
         if request.method == "DELETE":
@@ -749,3 +746,40 @@ class RecapYearView(APIView):
         year = query.validated_data.get("year") or today.year
         payload = build_year_recap(request.user, year, request)
         return Response(RecapYearResponseSerializer(payload).data)
+
+
+def _photo_file_response(nightcap):
+    photo = nightcap.favorite_photo
+    content_type = mimetypes.guess_type(photo.name)[0] or "image/jpeg"
+    return FileResponse(
+        photo.open("rb"),
+        as_attachment=False,
+        filename=Path(photo.name).name,
+        content_type=content_type,
+    )
+
+
+@extend_schema(
+    tags=["Recaps"],
+    summary="Photo for a recap moment",
+    description=(
+        "Streams the favorite photo attached to a slideshow moment. "
+        "The owner can load it, and so can their partner while the couple is linked."
+    ),
+    responses={200: OpenApiTypes.BINARY, 404: None},
+)
+class RecapMomentPhotoView(APIView):
+    permission_classes = [IsAuthenticated, HasActiveMembership]
+
+    def get(self, request, nightcap_uuid):
+        nightcap = NightCap.objects.filter(uuid=nightcap_uuid).first()
+        if (
+            nightcap is None
+            or not nightcap.favorite_photo
+            or not viewer_can_see_nightcap(request.user, nightcap)
+        ):
+            return Response(
+                {"detail": "No photo for this day."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return _photo_file_response(nightcap)

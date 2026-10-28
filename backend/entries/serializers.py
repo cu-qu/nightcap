@@ -541,6 +541,9 @@ class RecapMomentSerializer(serializers.Serializer):
     mood = serializers.CharField(allow_blank=True)
     has_photo = serializers.BooleanField()
     photo_url = serializers.CharField(allow_null=True, required=False)
+    author = serializers.CharField(allow_blank=True, required=False)
+    author_id = serializers.CharField(allow_blank=True, required=False)
+    nightcap_uuid = serializers.UUIDField(required=False)
 
 
 class RecapMoodSerializer(serializers.Serializer):
@@ -600,11 +603,18 @@ class RecapSeasonSerializer(RecapSnapshotSerializer):
     tagline = serializers.CharField()
 
 
+class RecapPersonSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    name = serializers.CharField()
+
+
 class RecapMonthResponseSerializer(serializers.Serializer):
     kind = serializers.CharField()
     year = serializers.IntegerField()
     month = serializers.IntegerField()
     title = serializers.CharField()
+    shared = serializers.BooleanField()
+    people = RecapPersonSerializer(many=True)
     snapshot = RecapSnapshotSerializer()
     slides = RecapSlideSerializer(many=True)
 
@@ -613,6 +623,8 @@ class RecapYearResponseSerializer(serializers.Serializer):
     kind = serializers.CharField()
     year = serializers.IntegerField()
     title = serializers.CharField()
+    shared = serializers.BooleanField()
+    people = RecapPersonSerializer(many=True)
     snapshot = RecapSnapshotSerializer()
     seasons = RecapSeasonSerializer(many=True)
     slides = RecapSlideSerializer(many=True)
@@ -633,6 +645,7 @@ class RecapYearSummarySerializer(serializers.Serializer):
 
 class RecapIndexResponseSerializer(serializers.Serializer):
     highlight_days = serializers.IntegerField()
+    shared = serializers.BooleanField()
     featured_month = RecapMonthSummarySerializer(allow_null=True)
     featured_year = RecapYearSummarySerializer(allow_null=True)
     months = RecapMonthSummarySerializer(many=True)

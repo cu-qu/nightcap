@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import DayReflection, Entry, NightCap
+from .models import DayReflection, Entry, MonthlyRecap, NightCap
+
+
+@admin.register(MonthlyRecap)
+class MonthlyRecapAdmin(admin.ModelAdmin):
+    list_display = ("year", "month", "partnership", "user", "generated_at", "notified_at")
+    list_filter = ("year", "month")
+    search_fields = ("user__username", "user__email", "partnership__invite_code")
+    readonly_fields = ("generated_at", "notified_at")
 
 
 @admin.register(NightCap)

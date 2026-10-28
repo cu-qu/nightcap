@@ -430,7 +430,7 @@ export default function SettingsScreen() {
           <View style={styles.flex}>
             <Text style={styles.linkTitle}>Recaps</Text>
             <Text style={styles.linkSub}>
-              Past months and years — photos, moments, and check-ins
+              Monthly slideshows — shared when you're linked
             </Text>
           </View>
           <Text style={styles.linkChevron}>›</Text>

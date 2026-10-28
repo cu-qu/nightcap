@@ -32,3 +32,25 @@ def nightcap_photo_url(obj, request=None) -> str | None:
     if request is not None:
         return request.build_absolute_uri(path)
     return path
+
+
+def recap_moment_photo_url(obj, request=None) -> str | None:
+    """URL a linked partner can load for a recap moment.
+
+    Production uses the signed object URL. Locally this is the recap photo
+    proxy, which allows the owner and their partner — the per-user NightCap
+    photo route does not.
+    """
+    if not getattr(obj, "favorite_photo", None):
+        return None
+    if uses_object_storage():
+        signed = nightcap_photo_url(obj, request) or ""
+        if signed and "/api/v1/nightcaps/" not in signed:
+            return signed
+    path = f"/api/v1/recaps/moments/{obj.uuid}/photo/"
+    stamp = int(obj.updated_at.timestamp()) if getattr(obj, "updated_at", None) else 0
+    if stamp:
+        path = f"{path}?t={stamp}"
+    if request is not None:
+        return request.build_absolute_uri(path)
+    return path

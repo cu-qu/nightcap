@@ -69,9 +69,11 @@ API docs are available at http://localhost:8000/api/docs/.
 - `GET/PUT/PATCH /api/v1/day-reflections/{YYYY-MM-DD}/` (legacy; prefer NightCaps)
 - `GET /api/v1/calendar/?year=&month=` — month markers for the calendar UI
 - `GET /api/v1/charts/?period=daily|weekly&start_date=&end_date=`
-- `GET /api/v1/recaps/` — past months/years; featured recap in the first week of a new month
-- `GET /api/v1/recaps/month/?year=&month=` — Month Recap (photos, moments, logged items)
+- `GET /api/v1/recaps/` — past months/years; featured recap in the first week of a new month. Shared when a couple is linked
+- `GET /api/v1/recaps/month/?year=&month=` — Month slideshow: summary, then up to five top moments per person with photos, in order
+- `GET /api/v1/recaps/moments/{uuid}/photo/` — that moment's photo (owner or linked partner)
 - `GET /api/v1/recaps/year/?year=` — Year Recap walking through the seasons
+- `python manage.py generate_monthly_recaps` — same job Celery beat runs at 08:00 UTC on the 1st
 - `GET/POST /api/v1/goals/` — simple category-tied goals; list embeds live `progress`
 - `POST /api/v1/goals/set/` — upsert goal for category + period
 - `GET /api/v1/goals/progress/` — includes `status_label` (`on_track` / `at_risk` / `behind` / `reached`)

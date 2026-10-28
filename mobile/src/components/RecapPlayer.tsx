@@ -77,11 +77,52 @@ function PhotoGrid({ photos }: { photos: RecapPhoto[] }) {
   );
 }
 
+function momentPhotoFallback(moment?: RecapMoment): string | undefined {
+  if (!moment?.nightcap_uuid) return undefined;
+  return `/api/v1/recaps/moments/${moment.nightcap_uuid}/photo/`;
+}
+
+function MomentFrame({ slide }: { slide: RecapSlide }) {
+  const moment = slide.moments?.[0];
+  const photo = slide.photos?.[0];
+  const text = moment?.text || photo?.favorite_moment || "";
+  const date = moment?.date || photo?.date || "";
+  const showPhoto = Boolean(moment?.has_photo || photo?.photo_url);
+
+  return (
+    <View style={styles.momentFeature}>
+      {showPhoto ? (
+        <AuthenticatedImage
+          uri={resolveNightCapPhotoUri({
+            date,
+            photoUrl: photo?.photo_url || moment?.photo_url,
+          })}
+          fallbackUri={momentPhotoFallback(moment)}
+          style={styles.momentHero}
+          accessibilityLabel={
+            text
+              ? `${moment?.author ? `${moment.author}: ` : ""}${text}`
+              : `Favorite photo from ${date}`
+          }
+        />
+      ) : null}
+      {slide.eyebrow ? (
+        <Text style={styles.momentAuthor}>{slide.eyebrow}</Text>
+      ) : null}
+      <Text style={[styles.momentDate, styles.momentFeatureDate]}>
+        {moment?.mood ? `${moment.mood}  ` : ""}
+        {date ? formatDisplayDate(date) : slide.body}
+      </Text>
+      {text ? <Text style={styles.momentText}>“{text}”</Text> : null}
+    </View>
+  );
+}
+
 function MomentsList({ moments }: { moments: RecapMoment[] }) {
   return (
     <View style={styles.momentList}>
       {moments.map((moment) => (
-        <View key={moment.date} style={styles.momentCard}>
+        <View key={`${moment.author_id ?? ""}-${moment.date}`} style={styles.momentCard}>
           {moment.has_photo ? (
             <AuthenticatedImage
               uri={resolveNightCapPhotoUri({
@@ -98,6 +139,9 @@ function MomentsList({ moments }: { moments: RecapMoment[] }) {
             />
           ) : null}
           <View style={styles.momentCopy}>
+            {moment.author ? (
+              <Text style={styles.momentAuthor}>{moment.author}</Text>
+            ) : null}
             <Text style={styles.momentDate}>
               {moment.mood ? `${moment.mood}  ` : ""}
               {formatDisplayDate(moment.date)}
@@ -120,6 +164,9 @@ function SlideBody({ slide }: { slide: RecapSlide }) {
   const moods = slide.moods ?? [];
   const categories = slide.categories ?? [];
 
+  if (slide.type === "moment") {
+    return <MomentFrame slide={slide} />;
+  }
   if (slide.type === "moments") {
     const cards =
       moments.length > 0
@@ -229,7 +276,7 @@ export function RecapPlayer({ slides, onClose }: Props) {
           accessibilityLabel="Next"
         />
         <View style={styles.eyebrowRow} pointerEvents="none">
-          {slide.eyebrow ? (
+          {slide.eyebrow && slide.type !== "moment" ? (
             <Text style={styles.eyebrow}>{slide.eyebrow}</Text>
           ) : null}
         </View>
@@ -238,13 +285,15 @@ export function RecapPlayer({ slides, onClose }: Props) {
             {slide.stat}
           </Text>
         ) : null}
-        {slide.title ? (
+        {slide.title && slide.type !== "moment" ? (
           <Text style={[styles.title, isHero && styles.titleHero]}>{slide.title}</Text>
         ) : null}
         {slide.label && slide.stat ? (
           <Text style={styles.label}>{slide.label}</Text>
         ) : null}
-        {slide.body ? <Text style={styles.copy}>{slide.body}</Text> : null}
+        {slide.body && slide.type !== "moment" ? (
+          <Text style={styles.copy}>{slide.body}</Text>
+        ) : null}
 
         {isHero ? (
           <SlideBody slide={slide} />
@@ -386,6 +435,25 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     fontSize: 13,
     color: colors.muted,
+  },
+  momentFeature: {
+    marginTop: 8,
+  },
+  momentHero: {
+    width: "100%",
+    height: 360,
+    borderRadius: 18,
+    backgroundColor: colors.elevated,
+  },
+  momentAuthor: {
+    marginTop: 14,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    color: colors.accentSoft,
+  },
+  momentFeatureDate: {
+    marginTop: 6,
   },
   momentList: {
     marginTop: 8,

@@ -60,7 +60,9 @@ export default function RecapArchiveScreen() {
         <Text style={styles.eyebrow}>Look back</Text>
         <Text style={styles.title}>Recaps</Text>
         <Text style={styles.body}>
-          Past months and years — photos, moments, and what you logged.
+          {data?.shared
+            ? "Shared with your partner. Each month is a slideshow — five top moments from each of you, photos in order."
+            : "Each month is a slideshow of your five top moments, photos in order."}
         </Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
