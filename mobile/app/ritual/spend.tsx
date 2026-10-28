@@ -20,6 +20,7 @@ import { RitualCategoryField } from "@/src/components/RitualCategoryField";
 import { RitualMomentsSection } from "@/src/components/RitualMomentsSection";
 import { ShootingStarTransition } from "@/src/components/ShootingStarTransition";
 import { enqueueRitual } from "@/src/db/sync";
+import { confirmReportContent } from "@/src/safety/reportContent";
 import { useAuthStore } from "@/src/store/authStore";
 import { useGroupsStore } from "@/src/store/groupsStore";
 import { useRitualDraftStore } from "@/src/store/ritualDraftStore";
@@ -311,6 +312,21 @@ export default function NightCapEntryScreen() {
       </ScrollView>
 
       <FormScroll style={styles.flex} contentContainerStyle={styles.content}>
+        {sharedRitual?.partner_username && sharedRitual.entries.length > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() =>
+              confirmReportContent({
+                username: sharedRitual.partner_username || "your partner",
+              })
+            }
+            hitSlop={6}
+          >
+            <Text style={styles.reportPartner}>
+              Report {sharedRitual.partner_username}
+            </Text>
+          </Pressable>
+        ) : null}
         {activeGroup && !isWrap && !isMoments ? (
           <>
             <View style={styles.sectionHeader}>
@@ -507,6 +523,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: colors.text,
+  },
+  reportPartner: {
+    marginBottom: 12,
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.danger,
   },
   sectionHeader: {
     flexDirection: "row",

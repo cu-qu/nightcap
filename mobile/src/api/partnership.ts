@@ -40,6 +40,20 @@ export async function leavePartnership(): Promise<{ partnership: null }> {
   return apiRequest("/api/v1/partnership/leave/", { method: "POST" });
 }
 
+export async function reportPartner(input: {
+  nightcap_uuid?: string;
+  note?: string;
+}): Promise<{ detail: string }> {
+  return apiRequest("/api/v1/partnership/report/", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function blockPartner(): Promise<{ partnership: null; detail: string }> {
+  return apiRequest("/api/v1/partnership/block/", { method: "POST" });
+}
+
 export type PartnerNudge = {
   date: string;
   from_username: string;

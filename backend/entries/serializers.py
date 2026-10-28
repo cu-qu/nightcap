@@ -78,6 +78,10 @@ class EntrySerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
+        from entries.moderation import require_clean_text
+
+        require_clean_text(attrs.get("notes"), field="notes")
+        require_clean_text(attrs.get("label"), field="label")
         category = attrs.get("category") or getattr(self.instance, "category", None)
         if category is None:
             return attrs
@@ -143,6 +147,15 @@ class DayReflectionSerializer(serializers.ModelSerializer):
         model = DayReflection
         fields = ("date", "reflection", "created_at", "updated_at")
         read_only_fields = ("date", "created_at", "updated_at")
+
+    def validate_reflection(self, value):
+        from entries.moderation import text_is_objectionable
+
+        if text_is_objectionable(value):
+            raise serializers.ValidationError(
+                "That can't be saved. Take out attacks or sexual content, then try again."
+            )
+        return value
 
 
 class NightCapPhotoSerializer(serializers.Serializer):
@@ -242,6 +255,13 @@ class NightCapWriteSerializer(serializers.Serializer):
         required=False,
     )
 
+    def validate(self, attrs):
+        from entries.moderation import require_clean_text
+
+        require_clean_text(attrs.get("reflection"), field="reflection")
+        require_clean_text(attrs.get("favorite_moment"), field="favorite_moment")
+        return attrs
+
 
 class RitualItemSerializer(serializers.Serializer):
     category = serializers.IntegerField(required=False)
@@ -286,6 +306,10 @@ class RitualItemSerializer(serializers.Serializer):
                 {"category": "Category not found for this user."}
             ) from exc
 
+        from entries.moderation import require_clean_text
+
+        require_clean_text(attrs.get("notes"), field="notes")
+        require_clean_text(attrs.get("label"), field="label")
         metrics = validate_entry_metric_fields(
             category, attrs.get("amount"), attrs.get("quantity")
         )
@@ -313,7 +337,11 @@ class RitualRequestSerializer(serializers.Serializer):
     items = RitualItemSerializer(many=True, required=False)
 
     def validate(self, attrs):
+        from entries.moderation import require_clean_text
+
         attrs.setdefault("items", [])
+        require_clean_text(attrs.get("reflection"), field="reflection")
+        require_clean_text(attrs.get("favorite_moment"), field="favorite_moment")
         return attrs
 
 

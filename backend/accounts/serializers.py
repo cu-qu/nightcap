@@ -162,6 +162,11 @@ class PartnershipNudgeSerializer(serializers.Serializer):
     date = serializers.DateField()
 
 
+class PartnershipReportSerializer(serializers.Serializer):
+    nightcap_uuid = serializers.UUIDField(required=False)
+    note = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+
 class DevicePushTokenSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=255)
     platform = serializers.ChoiceField(

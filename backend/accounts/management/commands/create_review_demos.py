@@ -1,7 +1,10 @@
+from datetime import timedelta
+
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.utils import timezone
 
-from accounts.memberships import grant_complimentary_membership
+from accounts.memberships import ensure_user_membership, grant_complimentary_membership
 from accounts.models import User
 from accounts.partnerships import accept_invite_code, ensure_partnership, get_partner_user
 from categories.defaults import sync_default_categories_for_user
@@ -11,21 +14,23 @@ DEMOS = (
     {"username": "demo1", "email": "demo1@nightcap.app", "kind": "solo"},
     {"username": "demo2", "email": "demo2@nightcap.app", "kind": "owner"},
     {"username": "demo3", "email": "demo3@nightcap.app", "kind": "partner"},
+    {"username": "demo4", "email": "demo4@nightcap.app", "kind": "expired"},
 )
 
 
 class Command(BaseCommand):
     help = (
-        "Create or refresh the three App Review accounts: demo1 solo, "
-        "demo2 and demo3 linked as partners. Email is already verified, "
-        "onboarding is complete, and access does not expire."
+        "Create or refresh the App Review accounts: demo1 solo, "
+        "demo2 and demo3 linked as partners, and demo4 solo with an ended "
+        "trial so the payment sheet can open. Email is already verified and "
+        "onboarding is complete. demo1–demo3 do not expire."
     )
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--password",
             required=True,
-            help="Password set on all three accounts. Not stored in the repo.",
+            help="Password set on all four accounts. Not stored in the repo.",
         )
 
     def handle(self, *args, **options):
@@ -50,11 +55,13 @@ class Command(BaseCommand):
             for user in users.values():
                 complete_onboarding(user)
                 sync_default_categories_for_user(user)
+            _end_trial(users["demo4"])
 
         self.stdout.write(self.style.SUCCESS("App Review demos are ready."))
-        self.stdout.write("demo1  solo")
-        self.stdout.write("demo2  partnered with demo3")
+        self.stdout.write("demo1  solo, complimentary")
+        self.stdout.write("demo2  partnered with demo3, complimentary")
         self.stdout.write("demo3  partnered with demo2")
+        self.stdout.write("demo4  solo, trial ended — payment sheet")
 
     def _upsert(self, spec: dict, password: str) -> User:
         username = spec["username"]
@@ -80,3 +87,28 @@ class Command(BaseCommand):
         user.is_deleted = False
         user.save()
         return user
+
+
+def _end_trial(user) -> None:
+    """Leave a verified account on the paywall with working subscribe buttons."""
+    now = timezone.now()
+    membership = ensure_user_membership(user)
+    membership.complimentary = False
+    membership.complimentary_until = None
+    membership.granted_by = None
+    membership.granted_at = None
+    membership.grant_note = ""
+    membership.trial_started_at = now - timedelta(days=40)
+    membership.trial_ends_at = now - timedelta(days=1)
+    membership.save(
+        update_fields=[
+            "complimentary",
+            "complimentary_until",
+            "granted_by",
+            "granted_at",
+            "grant_note",
+            "trial_started_at",
+            "trial_ends_at",
+            "updated_at",
+        ]
+    )

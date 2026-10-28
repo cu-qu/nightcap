@@ -134,7 +134,6 @@ export default function RootLayout() {
   const hydrateReminders = useReminderStore((s) => s.hydrate);
   const syncReminderSchedule = useReminderStore((s) => s.syncSchedule);
   const user = useAuthStore((s) => s.user);
-  const partnered = (user?.partnership?.members?.length ?? 0) > 1;
 
   useReminderObserver();
 
@@ -171,12 +170,12 @@ export default function RootLayout() {
     if (!hydrated) return;
     if (isAuthenticated && !needsEmailVerification(user)) {
       void syncReminderSchedule();
-      void registerPushTokenIfPossible({ prompt: partnered });
+      void registerPushTokenIfPossible();
       if (remindersSupported()) {
         void Notifications.setBadgeCountAsync(0).catch(() => undefined);
       }
     } else void cancelNightlyReminder();
-  }, [hydrated, isAuthenticated, partnered, syncReminderSchedule, user]);
+  }, [hydrated, isAuthenticated, syncReminderSchedule, user]);
 
   if (!hydrated) {
     return (

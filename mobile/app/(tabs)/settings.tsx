@@ -22,6 +22,10 @@ import {
   normalizeInviteCode,
   formatInviteCodeInput,
 } from "@/src/api/partnership";
+import {
+  confirmBlockPartner,
+  confirmReportContent,
+} from "@/src/safety/reportContent";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { ReminderTimePicker } from "@/src/components/ReminderTimePicker";
 import { LEGAL_URLS } from "@/src/iap/products";
@@ -154,8 +158,9 @@ export default function SettingsScreen() {
       setInviteMessage(
         linked ? `Linked with ${linked.username}` : "You're linked with your partner."
       );
-      const allowed = await registerPushTokenIfPossible({ prompt: true });
+      const allowed = await hasNotificationPermission();
       setNotifyAllowed(allowed);
+      if (allowed) void registerPushTokenIfPossible();
     } catch (e) {
       setInviteMessage(e instanceof Error ? e.message : "Could not link with that code");
     } finally {
@@ -180,7 +185,7 @@ export default function SettingsScreen() {
     Alert.alert(
       linkedName ? "Unlink partner?" : "Use NightCap alone?",
       linkedName
-        ? `You'll no longer share progress with ${linkedName}. Together goals become personal for both of you.`
+        ? `You'll stop sharing progress with ${linkedName}. Together goals become personal. The subscription stays with whoever paid. If that isn't you, you go back to your own trial.`
         : "Your invite code will stop working. You can invite someone later.",
       [
         { text: "Cancel", style: "cancel" },
@@ -297,38 +302,59 @@ export default function SettingsScreen() {
               <Text style={styles.partnerSub}>
                 Together goals count both of you after you each approve.
                 Personal goals stay private. Remind them from Home or Calendar
-                and they’ll get an iPhone notification to fill out that day’s
-                NightCap.
+                and they can get a notification to fill out that day’s NightCap.
               </Text>
               {remindersSupported() && !notifyAllowed ? (
-                <PrimaryButton
-                  title="Turn on notifications"
-                  variant="secondary"
-                  loading={notifyBusy}
-                  onPress={() => {
-                    void (async () => {
-                      setNotifyBusy(true);
-                      try {
-                        const allowed = await requestNotificationPermission();
-                        setNotifyAllowed(allowed);
-                        if (allowed) await registerPushTokenIfPossible();
-                        else {
-                          setInviteMessage(
-                            "Notifications are off for NightCap. Enable them in iOS Settings."
-                          );
+                <>
+                  <Text style={styles.partnerSub}>
+                    Continue to the iPhone prompt if you want those nudges.
+                  </Text>
+                  <PrimaryButton
+                    title="Continue"
+                    variant="secondary"
+                    loading={notifyBusy}
+                    onPress={() => {
+                      void (async () => {
+                        setNotifyBusy(true);
+                        try {
+                          const allowed = await requestNotificationPermission();
+                          setNotifyAllowed(allowed);
+                          if (allowed) await registerPushTokenIfPossible();
+                          else {
+                            setInviteMessage(
+                              "Notifications are off for NightCap. Turn them on in iOS Settings."
+                            );
+                          }
+                        } finally {
+                          setNotifyBusy(false);
                         }
-                      } finally {
-                        setNotifyBusy(false);
-                      }
-                    })();
-                  }}
-                />
+                      })();
+                    }}
+                  />
+                </>
               ) : null}
               <PrimaryButton
                 title="Unlink partner"
                 variant="secondary"
                 onPress={onLeavePartnership}
                 loading={inviteBusy}
+              />
+              <PrimaryButton
+                title="Report partner"
+                variant="ghost"
+                onPress={() =>
+                  confirmReportContent({
+                    username: other.username,
+                    onFinished: () => void refreshUser(),
+                  })
+                }
+              />
+              <PrimaryButton
+                title="Block partner"
+                variant="ghost"
+                onPress={() =>
+                  confirmBlockPartner(other.username, () => void refreshUser())
+                }
               />
             </>
           ) : partnership ? (
@@ -479,7 +505,7 @@ export default function SettingsScreen() {
           hitSlop={6}
         >
           <View style={styles.flex}>
-            <Text style={styles.linkTitle}>Terms</Text>
+            <Text style={styles.linkTitle}>Terms of Use</Text>
             <Text style={styles.linkSub}>Terms of service</Text>
           </View>
           <Text style={styles.linkChevron}>›</Text>

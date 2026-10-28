@@ -320,3 +320,47 @@ class PartnerNudge(models.Model):
 
     def __str__(self):
         return f"{self.from_user.username} nudged {self.to_user.username} for {self.date}"
+
+
+class PartnerBlock(models.Model):
+    """Stops two people from linking again after one of them blocks the other."""
+
+    blocker = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="partner_blocks_made"
+    )
+    blocked = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="partner_blocks_received"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "accounts_partnerblock"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["blocker", "blocked"],
+                name="unique_partner_block",
+            )
+        ]
+
+
+class ContentReport(models.Model):
+    """A review of something a linked partner shared. A row with no NightCap covers that person."""
+
+    reporter = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="content_reports_made"
+    )
+    author = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="content_reports_received"
+    )
+    nightcap = models.ForeignKey(
+        "entries.NightCap",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="content_reports",
+    )
+    note = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "accounts_contentreport"

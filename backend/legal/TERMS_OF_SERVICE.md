@@ -10,7 +10,7 @@ Questions: [night_cap_app@proton.me](mailto:night_cap_app@proton.me)
 
 NightCap helps you log spend, habits, workouts, notes, and an optional photo of the day, alone or with one partner. You keep ownership of the data you enter. You are responsible for keeping your password private and for content you upload (including photos).
 
-Use NightCap lawfully. Do not upload illegal content, harass anyone, or attempt to break into another account. A linked partner can see your favorite photos and moment notes in a shared recap. Do not upload images you do not have the right to store. From a shared recap you can report a partner’s moment to night_cap_app@proton.me.
+Use NightCap lawfully. Do not upload illegal content, harass anyone, or attempt to break into another account. A linked partner can see your favorite photos and moment notes in a shared recap. Do not upload images you do not have the right to store. From a shared recap, the nightly check-in, or Settings you can report a partner’s moment. That hides it from your recaps and emails night_cap_app@proton.me. Settings → Block partner unlinks you and stops that person from joining again.
 
 ## Subscriptions (NightCap for two)
 

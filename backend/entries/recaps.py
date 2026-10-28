@@ -103,7 +103,43 @@ def viewer_can_see_nightcap(viewer, nightcap) -> bool:
     if nightcap.user_id == viewer.id:
         return True
     partner = get_partner_user(viewer)
-    return partner is not None and partner.id == nightcap.user_id
+    if partner is None or partner.id != nightcap.user_id:
+        return False
+    from accounts.models import ContentReport
+
+    if ContentReport.objects.filter(
+        reporter=viewer,
+        author_id=nightcap.user_id,
+        nightcap__isnull=True,
+    ).exists():
+        return False
+    return not ContentReport.objects.filter(reporter=viewer, nightcap=nightcap).exists()
+
+
+def _visible_to_viewer(nightcaps: list[NightCap], viewer) -> list[NightCap]:
+    """Drop moments the viewer has reported. Their own nights stay."""
+    if viewer is None or not nightcaps:
+        return nightcaps
+    from accounts.models import ContentReport
+
+    reports = ContentReport.objects.filter(reporter=viewer)
+    hidden_authors = set(
+        reports.filter(nightcap__isnull=True).values_list("author_id", flat=True)
+    )
+    hidden_nights = set(
+        reports.filter(nightcap__isnull=False).values_list("nightcap_id", flat=True)
+    )
+    if not hidden_authors and not hidden_nights:
+        return nightcaps
+    return [
+        nightcap
+        for nightcap in nightcaps
+        if nightcap.user_id == viewer.id
+        or (
+            nightcap.user_id not in hidden_authors
+            and nightcap.id not in hidden_nights
+        )
+    ]
 
 
 def _sample(items: list, limit: int) -> list:
@@ -247,14 +283,18 @@ def range_snapshot(
     photo_limit: int = PHOTO_LIMIT_MONTH,
     moment_limit: int = MOMENT_LIMIT_PER_PERSON,
     highlight_uuids: list | None = None,
+    viewer=None,
 ) -> dict:
     if not isinstance(users, (list, tuple)):
         users = [users]
     user_ids = [user.pk for user in users]
-    nightcaps = list(
-        NightCap.objects.filter(user_id__in=user_ids, date__gte=start, date__lte=end)
-        .select_related("user")
-        .order_by("date", "user_id")
+    nightcaps = _visible_to_viewer(
+        list(
+            NightCap.objects.filter(user_id__in=user_ids, date__gte=start, date__lte=end)
+            .select_related("user")
+            .order_by("date", "user_id")
+        ),
+        viewer,
     )
     entry_qs = Entry.objects.filter(user_id__in=user_ids, date__gte=start, date__lte=end)
     finance = finance_totals(entry_qs)
@@ -576,6 +616,7 @@ def build_month_recap(user, year: int, month: int, request=None) -> dict:
             clamped[1],
             request,
             highlight_uuids=highlight_uuids,
+            viewer=user,
         )
     if month_closed and stored is None and snapshot["nights_logged"]:
         stored, created = _store_month(
@@ -588,6 +629,7 @@ def build_month_recap(user, year: int, month: int, request=None) -> dict:
                 clamped[1],
                 request,
                 highlight_uuids=list(stored.highlight_uuids),
+                viewer=user,
             )
     return {
         "kind": "month",
@@ -618,6 +660,7 @@ def build_year_recap(user, year: int, request=None) -> dict:
             request,
             photo_limit=PHOTO_LIMIT_YEAR,
             moment_limit=MOMENT_LIMIT_YEAR,
+            viewer=user,
         )
         seasons = []
         for spec in SEASONS:
@@ -632,6 +675,7 @@ def build_year_recap(user, year: int, request=None) -> dict:
                 request,
                 photo_limit=PHOTO_LIMIT_SEASON,
                 moment_limit=MOMENT_LIMIT_SEASON,
+                viewer=user,
             )
             seasons.append(
                 {

@@ -1,5 +1,6 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -9,10 +10,12 @@ from core.permissions import HasActiveMembership
 from accounts.nudges import register_push_token, send_partner_nudge, unregister_push_token
 from accounts.partnerships import (
     accept_invite_code,
+    block_partner,
     ensure_partnership,
     get_user_partnership,
     leave_partnership,
     regenerate_invite_code,
+    report_partner_content,
     send_partner_invite,
     serialize_partnership,
 )
@@ -22,6 +25,7 @@ from accounts.serializers import (
     PartnershipInviteSerializer,
     PartnershipJoinSerializer,
     PartnershipNudgeSerializer,
+    PartnershipReportSerializer,
 )
 
 
@@ -73,6 +77,8 @@ class PartnershipInviteView(APIView):
             try:
                 send_partner_invite(partnership, request.user, email)
                 email_sent = True
+            except ValidationError:
+                raise
             except Exception:
                 email_sent = False
         return Response(
@@ -134,6 +140,46 @@ class PartnershipRegenerateCodeView(APIView):
             )
         regenerate_invite_code(partnership)
         return Response({"partnership": serialize_partnership(partnership)})
+
+
+class PartnershipReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Partnership"],
+        summary="Report a partner's shared moment",
+        description=(
+            "Hides that moment from the reporter's recaps. "
+            "Omit nightcap_uuid to report the partner's shared content in general."
+        ),
+        request=PartnershipReportSerializer,
+        responses={201: MessageSerializer},
+    )
+    def post(self, request):
+        serializer = PartnershipReportSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        nightcap_uuid = serializer.validated_data.get("nightcap_uuid")
+        report_partner_content(
+            request.user,
+            nightcap_uuid=str(nightcap_uuid) if nightcap_uuid else None,
+            note=serializer.validated_data.get("note") or "",
+        )
+        return Response({"detail": "Reported."}, status=status.HTTP_201_CREATED)
+
+
+class PartnershipBlockView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Partnership"],
+        summary="Block partner from linking again",
+        description="Unlinks the couple and refuses later invites between these accounts.",
+        request=None,
+        responses={200: MessageSerializer},
+    )
+    def post(self, request):
+        block_partner(request.user)
+        return Response({"partnership": None, "detail": "Blocked."})
 
 
 class PartnershipNudgeView(APIView):

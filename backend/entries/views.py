@@ -443,6 +443,10 @@ class NightCapViewSet(viewsets.ModelViewSet):
         )
 
     def partial_update(self, request, *args, **kwargs):
+        from entries.moderation import require_clean_text
+
+        require_clean_text(request.data.get("reflection"), field="reflection")
+        require_clean_text(request.data.get("favorite_moment"), field="favorite_moment")
         nightcap_date = _parse_path_date(str(kwargs["date"]))
         nightcap = get_or_create_nightcap(request.user, nightcap_date)
         reflection = request.data.get("reflection")

@@ -1,5 +1,6 @@
 import * as Network from "expo-network";
 
+import { ApiError } from "@/src/api/client";
 import { deleteNightCapPhoto, uploadNightCapPhoto } from "@/src/api/nightcaps";
 import { saveRitual } from "@/src/api/ritual";
 import {
@@ -18,6 +19,7 @@ import { isFutureIsoDate } from "@/src/utils/date";
 let flushing = false;
 let flushAgain = false;
 let lastPhotoUploadError: unknown = null;
+let lastRitualError: unknown = null;
 
 export async function isOnline(): Promise<boolean> {
   try {
@@ -60,7 +62,13 @@ export async function enqueueRitual(
       hasFavoritePhoto: hasLocalPhoto || (draft.hasRemotePhoto && !draft.photoCleared),
     }
   );
+  lastRitualError = null;
   const response = await flushOutbox();
+  if (lastRitualError) {
+    const error = lastRitualError;
+    lastRitualError = null;
+    throw error;
+  }
   if (await isOnline()) {
     const pending = new Set((await listPendingOutbox()).map((row) => row.id));
     if (pending.has(ritualId)) {
@@ -88,6 +96,7 @@ export async function flushOutbox(): Promise<RitualResponse | undefined> {
   let lastResponse: RitualResponse | undefined;
   let ritualFailed = false;
   lastPhotoUploadError = null;
+  lastRitualError = null;
 
   try {
     do {
@@ -100,8 +109,16 @@ export async function flushOutbox(): Promise<RitualResponse | undefined> {
             lastResponse = await saveRitual(payload);
             await markOutboxSynced(row.id);
             void useGoalsStore.getState().invalidate();
-          } catch {
-            // Keep row pending; stop to preserve order.
+          } catch (error) {
+            const rejected =
+              error instanceof ApiError &&
+              error.status >= 400 &&
+              error.status < 500 &&
+              error.status !== 401;
+            if (rejected) {
+              await markOutboxSynced(row.id);
+              lastRitualError = error;
+            }
             ritualFailed = true;
             break;
           }

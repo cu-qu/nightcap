@@ -19,7 +19,7 @@ export function LegalLinks() {
         hitSlop={8}
         onPress={() => void Linking.openURL(LEGAL_URLS.terms)}
       >
-        <Text style={styles.link}>Terms</Text>
+        <Text style={styles.link}>Terms of Use</Text>
       </Pressable>
     </View>
   );

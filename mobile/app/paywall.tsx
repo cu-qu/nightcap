@@ -152,7 +152,7 @@ export default function PaywallScreen() {
         <Text style={styles.legal}>{renewalCopy}</Text>
         <View style={styles.links}>
           <Pressable onPress={() => void Linking.openURL(LEGAL_URLS.terms)}>
-            <Text style={styles.link}>Terms</Text>
+            <Text style={styles.link}>Terms of Use</Text>
           </Pressable>
           <Text style={styles.dot}>·</Text>
           <Pressable onPress={() => void Linking.openURL(LEGAL_URLS.privacy)}>

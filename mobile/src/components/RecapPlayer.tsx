@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { nightCapPhotoUrl, resolveNightCapPhotoUri } from "@/src/api/nightcaps";
 import { AuthenticatedImage } from "@/src/components/AuthenticatedImage";
 import { PrimaryButton } from "@/src/components/PrimaryButton";
+import { confirmReportContent } from "@/src/safety/reportContent";
 import { useAuthStore } from "@/src/store/authStore";
 import { colors } from "@/src/theme/colors";
 import type {
@@ -29,8 +29,6 @@ type Props = {
   onClose: () => void;
 };
 
-const SUPPORT_EMAIL = "night_cap_app@proton.me";
-
 function isPartnerMoment(
   moment: RecapMoment | undefined,
   viewerId: string | number | undefined
@@ -39,28 +37,22 @@ function isPartnerMoment(
   return String(moment.author_id) !== String(viewerId);
 }
 
-function reportMoment(moment: RecapMoment, username: string) {
-  const body = [
-    `NightCap username: ${username || "unknown"}`,
-    moment.author ? `Moment from: ${moment.author}` : null,
-    moment.date ? `Date: ${moment.date}` : null,
-    moment.nightcap_uuid ? `Moment id: ${moment.nightcap_uuid}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Report a NightCap moment")}&body=${encodeURIComponent(body)}`;
-  void Linking.openURL(href);
-}
-
 function ReportMoment({ moment }: { moment: RecapMoment }) {
   const user = useAuthStore((s) => s.user);
+  const refreshUser = useAuthStore((s) => s.refreshUser);
   if (!isPartnerMoment(moment, user?.id)) return null;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Report moment"
       hitSlop={8}
-      onPress={() => reportMoment(moment, user?.username || "")}
+      onPress={() =>
+        confirmReportContent({
+          username: moment.author || "your partner",
+          nightcapUuid: moment.nightcap_uuid,
+          onFinished: () => void refreshUser(),
+        })
+      }
       style={styles.report}
     >
       <Text style={styles.reportLabel}>Report</Text>

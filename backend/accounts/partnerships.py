@@ -1,14 +1,24 @@
+import logging
+
+from django.conf import settings
+from django.core.mail import send_mail
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from accounts.models import (
+    ContentReport,
+    PartnerBlock,
     Partnership,
     PartnershipInvite,
     PartnershipMember,
+    User,
     UserProfile,
     generate_partnership_invite_code,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_user_partnership(user) -> Partnership | None:
@@ -98,10 +108,30 @@ def regenerate_invite_code(partnership: Partnership) -> Partnership:
     raise ValidationError("Could not generate a new invite code. Try again.")
 
 
+def users_are_blocked(left, right) -> bool:
+    if left is None or right is None or left.id == right.id:
+        return False
+    return PartnerBlock.objects.filter(
+        Q(blocker=left, blocked=right) | Q(blocker=right, blocked=left)
+    ).exists()
+
+
+def _reject_if_blocked(user, other, *, field: str, message: str) -> None:
+    if users_are_blocked(user, other):
+        raise ValidationError({field: message})
+
+
 def send_partner_invite(partnership: Partnership, invited_by, email: str) -> PartnershipInvite:
     from accounts.emails import PartnerInviteEmail
 
     email = email.strip().lower()
+    existing_user = User.objects.filter(email__iexact=email).first()
+    _reject_if_blocked(
+        invited_by,
+        existing_user,
+        field="email",
+        message="You can't invite this person.",
+    )
     invite = PartnershipInvite.objects.create(
         partnership=partnership,
         email=email,
@@ -210,6 +240,14 @@ def accept_invite_code(user, code: str) -> Partnership:
     if partnership.members.count() >= 2:
         raise ValidationError({"invite_code": "This couple already has two people."})
 
+    for member in partnership.members.select_related("user"):
+        _reject_if_blocked(
+            user,
+            member.user,
+            field="invite_code",
+            message="You can't join this couple space.",
+        )
+
     with transaction.atomic():
         abandon_unpaired_partnership(user)
         PartnershipMember.objects.create(
@@ -236,3 +274,64 @@ def accept_invite_code(user, code: str) -> Partnership:
 
     copy_shared_goals_to_user(partnership, user)
     return partnership
+
+
+def block_partner(user):
+    """Unlink and refuse any later invite between these two accounts."""
+    partner = get_partner_user(user)
+    if partner is None:
+        raise ValidationError("You're not linked with a partner.")
+    with transaction.atomic():
+        PartnerBlock.objects.get_or_create(blocker=user, blocked=partner)
+        leave_partnership(user)
+    return partner
+
+
+def report_partner_content(user, *, nightcap_uuid: str | None = None, note: str = "") -> ContentReport:
+    """Record a report and hide that moment (or everything they shared) from the reporter."""
+    partner = get_partner_user(user)
+    if partner is None:
+        raise ValidationError("You're not linked with a partner.")
+
+    nightcap = None
+    if nightcap_uuid:
+        from entries.models import NightCap
+
+        nightcap = NightCap.objects.filter(uuid=nightcap_uuid, user=partner).first()
+        if nightcap is None:
+            raise ValidationError({"nightcap_uuid": "That moment isn't from your partner."})
+
+    report, _created = ContentReport.objects.get_or_create(
+        reporter=user,
+        author=partner,
+        nightcap=nightcap,
+        defaults={"note": (note or "")[:500]},
+    )
+    _email_content_report(report)
+    return report
+
+
+def _email_content_report(report: ContentReport) -> None:
+    recipient = getattr(settings, "SUPPORT_EMAIL", "night_cap_app@proton.me")
+    moment = ""
+    if report.nightcap_id:
+        moment = (
+            f"\nDate: {report.nightcap.date.isoformat()}"
+            f"\nMoment id: {report.nightcap.uuid}"
+        )
+    body = (
+        f"Reporter: {report.reporter.username}\n"
+        f"Partner: {report.author.username}"
+        f"{moment}\n"
+        f"Note: {report.note or '(none)'}"
+    )
+    try:
+        send_mail(
+            subject="NightCap content report",
+            message=body,
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+            recipient_list=[recipient],
+            fail_silently=True,
+        )
+    except Exception:
+        logger.exception("Could not email content report %s", report.pk)

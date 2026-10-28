@@ -13,7 +13,8 @@ NightCap is sold as an auto-renewing subscription through the Apple App Store or
 - Restore a purchase you already paid for: open NightCap → **See plans** → **Restore purchases**
 - Cancel or change plans: iPhone **Settings → Apple ID → Subscriptions**, or Google Play → Payments & subscriptions
 - Offer codes: on iPhone, NightCap → **Redeem Apple offer code**
-- Report a partner’s moment: open the shared recap and tap **Report**. That emails us your username and which moment you mean.
+- Report a partner’s moment: open the shared recap and tap **Report**, or use **Settings → Report partner**. That emails us and hides the moment from your recaps.
+- Block someone from linking again: **Settings → Block partner**.
 
 ## Delete your account
 
