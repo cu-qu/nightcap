@@ -2,13 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 
+import { FieldInput, FormScroll } from "@/src/components/FormScroll";
 import { PrimaryButton } from "@/src/components/PrimaryButton";
 import { EmojiPicker } from "@/src/components/EmojiPicker";
 import { colors } from "@/src/theme/colors";
@@ -147,8 +146,7 @@ export function AddCategoryModal({
           <Text style={styles.title}>Add category</Text>
           <Text style={styles.subtitle}>to {titleTarget}</Text>
 
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
+          <FormScroll
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
           >
@@ -196,7 +194,7 @@ export function AddCategoryModal({
 
             <View style={styles.block}>
               <Text style={styles.label}>Name</Text>
-              <TextInput
+              <FieldInput
                 value={name}
                 onChangeText={setName}
                 placeholder="e.g. Coffee runs"
@@ -248,7 +246,7 @@ export function AddCategoryModal({
                 </Text>
               ) : null}
             </View>
-          </ScrollView>
+          </FormScroll>
 
           <PrimaryButton
             title="Add category"

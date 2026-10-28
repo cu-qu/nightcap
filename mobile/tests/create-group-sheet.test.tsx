@@ -1,6 +1,6 @@
 import { Dimensions, Platform } from "react-native";
 
-import { keyboardOverlap } from "@/src/components/CreateGroupSheet";
+import { keyboardOverlap } from "@/src/keyboard/keyboardOverlap";
 
 describe("keyboardOverlap", () => {
   const height = Dimensions.get("window").height;

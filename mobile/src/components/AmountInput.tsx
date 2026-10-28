@@ -1,4 +1,6 @@
-import { TextInput, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+
+import { FieldInput } from "@/src/components/FormScroll";
 
 import { colors } from "@/src/theme/colors";
 import { sanitizeDecimalInput } from "@/src/utils/date";
@@ -27,7 +29,7 @@ export function AmountInput({
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <View style={styles.row}>
         {prefix ? <Text style={styles.prefix}>{prefix}</Text> : null}
-        <TextInput
+        <FieldInput
           value={value}
           editable={editable}
           keyboardType="decimal-pad"

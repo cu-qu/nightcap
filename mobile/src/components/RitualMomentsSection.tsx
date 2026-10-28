@@ -1,8 +1,9 @@
 import * as ImagePicker from "expo-image-picker";
-import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { nightCapPhotoUrl, resolveNightCapPhotoUri } from "@/src/api/nightcaps";
 import { AuthenticatedImage } from "@/src/components/AuthenticatedImage";
+import { FieldInput } from "@/src/components/FormScroll";
 import { colors } from "@/src/theme/colors";
 
 const PHOTO_MAX_BYTES = 8 * 1024 * 1024;
@@ -146,7 +147,7 @@ export function RitualMomentsSection({
 
       <Text style={[styles.sectionTitle, { marginTop: 28 }]}>Favorite moment</Text>
       <Text style={styles.hint}>A line you’ll want to remember.</Text>
-      <TextInput
+      <FieldInput
         value={favoriteMoment}
         onChangeText={onChangeMoment}
         placeholder="What was the best part?"
@@ -220,5 +221,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     lineHeight: 22,
+    maxHeight: 200,
   },
 });

@@ -88,11 +88,12 @@ describe("SetGoalSheet editing", () => {
 
     expect(screen.queryByPlaceholderText("0")).toBeNull();
 
-    fireEvent.press(screen.getByText("Amount").parent!);
-    const dollars = await screen.findByText("$ USD");
-    fireEvent.press(dollars.parent ?? dollars);
-    fireEvent.changeText(screen.getByPlaceholderText("0"), "40");
-    fireEvent.press(screen.getByRole("button", { name: "Save changes" }));
+    await fireEvent.press(screen.getByTestId("measure-amount"));
+    await fireEvent.press(screen.getByTestId("unit-usd"));
+    expect(screen.getByText("Target ($)")).toBeOnTheScreen();
+    await fireEvent.changeText(screen.getByTestId("goal-target"), "40");
+    expect(screen.getByTestId("goal-target").props.value).toBe("40");
+    await fireEvent.press(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => {
       expect(categoriesApi.updateCategory).toHaveBeenCalledWith(9, {

@@ -1,5 +1,6 @@
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { FieldInput } from "@/src/components/FormScroll";
 import { colors } from "@/src/theme/colors";
 import type { GoalScope, GoalTemplate } from "@/src/types/api";
 import { sanitizeDecimalInput } from "@/src/utils/date";
@@ -176,7 +177,7 @@ export function SpendLimitPicker({
 
                 <View style={styles.amountRow}>
                   <Text style={styles.dollar}>$</Text>
-                  <TextInput
+                  <FieldInput
                     value={value}
                     onChangeText={(t) =>
                       onTarget(template.slug, sanitizeDecimalInput(t))

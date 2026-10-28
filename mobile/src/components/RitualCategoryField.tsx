@@ -1,4 +1,6 @@
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+
+import { FieldInput } from "@/src/components/FormScroll";
 
 import { colors } from "@/src/theme/colors";
 import { categoryGlyph } from "@/src/theme/iconMap";
@@ -100,7 +102,7 @@ export function RitualCategoryField({
         ) : (
           <View style={styles.inputRow}>
             {prefix ? <Text style={styles.affix}>{prefix}</Text> : null}
-            <TextInput
+            <FieldInput
               value={typeof value === "string" ? value : ""}
               onChangeText={(t) => onChange(sanitizeDecimalInput(t))}
               keyboardType="decimal-pad"

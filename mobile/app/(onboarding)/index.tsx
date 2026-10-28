@@ -1,17 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, Share, StyleSheet, Text, View } from "react-native";
 
 import { ApiError } from "@/src/api/client";
+import { FieldInput, FormScroll } from "@/src/components/FormScroll";
 import {
   fetchOnboardingStatus,
   fetchOnboardingTemplates,
@@ -506,14 +497,7 @@ export default function OnboardingScreen() {
 
   return (
     <Screen>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.flex}
-      >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
+      <FormScroll contentContainerStyle={styles.content} style={styles.flex}>
           <Text style={styles.brand}>NightCap</Text>
           <Text style={styles.kicker}>Couple habit tracking</Text>
           <View style={styles.progress}>
@@ -586,7 +570,7 @@ export default function OnboardingScreen() {
                   share yours — they’ll join after they create an account.
                 </Text>
                 <Text style={styles.labelFirst}>Their invite code</Text>
-                <TextInput
+                <FieldInput
                   autoCapitalize="characters"
                   autoCorrect={false}
                   autoComplete="off"
@@ -619,7 +603,7 @@ export default function OnboardingScreen() {
                       onPress={() => void shareCode()}
                     />
                     <Text style={styles.label}>Or email them</Text>
-                    <TextInput
+                    <FieldInput
                       autoCapitalize="none"
                       keyboardType="email-address"
                       value={inviteEmail}
@@ -828,8 +812,7 @@ export default function OnboardingScreen() {
               ) : null}
             </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </FormScroll>
     </Screen>
   );
 }

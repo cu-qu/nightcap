@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -16,6 +17,7 @@ import { AddCategoryModal } from "@/src/components/AddCategoryModal";
 import { CreateGroupSheet } from "@/src/components/CreateGroupSheet";
 import { EmojiPicker } from "@/src/components/EmojiPicker";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
+import { useKeyboardInset } from "@/src/keyboard/useKeyboardInset";
 import { useGroupsStore } from "@/src/store/groupsStore";
 import { colors } from "@/src/theme/colors";
 import { categoryGlyph, iconFor } from "@/src/theme/iconMap";
@@ -57,6 +59,12 @@ export default function CategoriesGroupsScreen() {
   const [editEmoji, setEditEmoji] = useState("✨");
   const [addForGroup, setAddForGroup] = useState<CategoryGroup | null>(null);
   const [addFromBottom, setAddFromBottom] = useState(false);
+  const keyboardInset = useKeyboardInset(!!editTarget);
+  const { height: windowHeight } = useWindowDimensions();
+  const editCardMaxHeight =
+    keyboardInset > 0
+      ? Math.max(240, windowHeight - keyboardInset - 32)
+      : undefined;
 
   useFocusEffect(
     useCallback(() => {
@@ -462,8 +470,18 @@ export default function CategoriesGroupsScreen() {
         animationType="fade"
         onRequestClose={() => setEditTarget(null)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+        <View
+          style={[
+            styles.modalBackdrop,
+            keyboardInset > 0 && { paddingBottom: keyboardInset },
+          ]}
+        >
+          <View
+            style={[
+              styles.modalCard,
+              editCardMaxHeight != null && { maxHeight: editCardMaxHeight },
+            ]}
+          >
             <ScrollView
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}

@@ -1,17 +1,9 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ApiError } from "@/src/api/client";
+import { FieldInput, FormScroll } from "@/src/components/FormScroll";
 import { LegalLinks } from "@/src/components/LegalLinks";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { useAuthStore } from "@/src/store/authStore";
@@ -50,14 +42,7 @@ export default function RegisterScreen() {
 
   return (
     <Screen>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.flex}
-      >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
+      <FormScroll contentContainerStyle={styles.content} style={styles.flex}>
           <Text style={styles.brand}>Join NightCap</Text>
           <Text style={styles.subtitle}>
             Couple habit tracking. Invite your partner in the next step — or paste a code now.
@@ -65,7 +50,7 @@ export default function RegisterScreen() {
           </Text>
 
           <Text style={styles.label}>Username</Text>
-          <TextInput
+          <FieldInput
             autoCapitalize="none"
             autoCorrect={false}
             value={username}
@@ -76,7 +61,7 @@ export default function RegisterScreen() {
           />
 
           <Text style={styles.label}>Email</Text>
-          <TextInput
+          <FieldInput
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
@@ -87,7 +72,7 @@ export default function RegisterScreen() {
           />
 
           <Text style={styles.label}>Password</Text>
-          <TextInput
+          <FieldInput
             secureTextEntry
             value={password}
             onChangeText={setPassword}
@@ -108,7 +93,7 @@ export default function RegisterScreen() {
           {showInvite ? (
             <>
               <Text style={styles.label}>Invite code</Text>
-              <TextInput
+              <FieldInput
                 autoCapitalize="characters"
                 autoCorrect={false}
                 value={inviteCode}
@@ -136,8 +121,7 @@ export default function RegisterScreen() {
             </Pressable>
           </View>
           <LegalLinks />
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </FormScroll>
     </Screen>
   );
 }

@@ -1,17 +1,9 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ApiError } from "@/src/api/client";
+import { FieldInput, FormScroll } from "@/src/components/FormScroll";
 import { LegalLinks } from "@/src/components/LegalLinks";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { useAuthStore } from "@/src/store/authStore";
@@ -42,21 +34,14 @@ export default function LoginScreen() {
 
   return (
     <Screen>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.flex}
-      >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
+      <FormScroll contentContainerStyle={styles.content} style={styles.flex}>
           <Text style={styles.brand}>NightCap</Text>
           <Text style={styles.subtitle}>
             Couple habit tracking — spend, workouts, and the little things, together or on your own.
           </Text>
 
           <Text style={styles.label}>Username</Text>
-          <TextInput
+          <FieldInput
             autoCapitalize="none"
             autoCorrect={false}
             value={username}
@@ -67,7 +52,7 @@ export default function LoginScreen() {
           />
 
           <Text style={styles.label}>Password</Text>
-          <TextInput
+          <FieldInput
             secureTextEntry
             value={password}
             onChangeText={setPassword}
@@ -108,8 +93,7 @@ export default function LoginScreen() {
             </Pressable>
           </View>
           <LegalLinks />
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </FormScroll>
     </Screen>
   );
 }

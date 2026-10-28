@@ -7,9 +7,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
+
+import { FieldInput, FormScroll } from "@/src/components/FormScroll";
 
 import { getNightCap } from "@/src/api/nightcaps";
 import { getSharedRitual } from "@/src/api/ritual";
@@ -309,11 +310,7 @@ export default function NightCapEntryScreen() {
         </Pressable>
       </ScrollView>
 
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
+      <FormScroll style={styles.flex} contentContainerStyle={styles.content}>
         {activeGroup && !isWrap && !isMoments ? (
           <>
             <View style={styles.sectionHeader}>
@@ -373,7 +370,7 @@ export default function NightCapEntryScreen() {
             <Text style={styles.wrapHint}>
               A note for tonight — optional, just for you.
             </Text>
-            <TextInput
+            <FieldInput
               value={reflection}
               onChangeText={setReflection}
               placeholder="What stood out today?"
@@ -410,7 +407,7 @@ export default function NightCapEntryScreen() {
                 : "Switch tabs anytime · Save submits everything"}
           </Text>
         </View>
-      </ScrollView>
+      </FormScroll>
     </Screen>
   );
 }
@@ -550,6 +547,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     lineHeight: 22,
+    maxHeight: 200,
   },
   empty: {
     marginTop: 24,

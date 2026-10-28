@@ -5,14 +5,14 @@ import {
   Linking,
   Platform,
   Pressable,
-  ScrollView,
   Share,
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   View,
 } from "react-native";
+
+import { FieldInput, FormScroll } from "@/src/components/FormScroll";
 
 import {
   ensurePartnership,
@@ -213,7 +213,7 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content}>
+      <FormScroll contentContainerStyle={styles.content}>
         <Text style={styles.muted}>Signed in as</Text>
         <Text style={styles.username}>{user?.username ?? "—"}</Text>
 
@@ -344,7 +344,7 @@ export default function SettingsScreen() {
                 onPress={() => void onShareCode()}
               />
               <Text style={styles.emailLabel}>Their invite code</Text>
-              <TextInput
+              <FieldInput
                 autoCapitalize="characters"
                 autoCorrect={false}
                 autoComplete="off"
@@ -362,7 +362,7 @@ export default function SettingsScreen() {
                 disabled={normalizeInviteCode(partnerCode).length < 6}
               />
               <Text style={styles.emailLabel}>Email invite</Text>
-              <TextInput
+              <FieldInput
                 autoCapitalize="none"
                 keyboardType="email-address"
                 value={email}
@@ -394,7 +394,7 @@ export default function SettingsScreen() {
                 you’re linked, and both of you approve them.
               </Text>
               <Text style={styles.emailLabel}>Their invite code</Text>
-              <TextInput
+              <FieldInput
                 autoCapitalize="characters"
                 autoCorrect={false}
                 autoComplete="off"
@@ -510,7 +510,7 @@ export default function SettingsScreen() {
             <Text style={styles.deleteAccount}>Delete account</Text>
           </Pressable>
         </View>
-      </ScrollView>
+      </FormScroll>
     </Screen>
   );
 }

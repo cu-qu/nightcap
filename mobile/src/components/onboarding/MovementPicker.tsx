@@ -1,4 +1,6 @@
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+
+import { FieldInput } from "@/src/components/FormScroll";
 
 import { colors } from "@/src/theme/colors";
 import type { GoalScope, GoalTemplate } from "@/src/types/api";
@@ -271,7 +273,7 @@ export function MovementPicker({
                     })}
                   </View>
                   <View style={styles.amountRow}>
-                    <TextInput
+                    <FieldInput
                       value={value}
                       onChangeText={(t) =>
                         onTarget(template.slug, sanitizeDecimalInput(t))
@@ -347,7 +349,7 @@ export function MovementPicker({
                 ) : null}
               </View>
               <View style={styles.amountRow}>
-                <TextInput
+                <FieldInput
                   value={value}
                   onChangeText={(t) =>
                     onTarget(template.slug, sanitizeDecimalInput(t))

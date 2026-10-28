@@ -1,19 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentRef } from "react";
 import {
-  Dimensions,
-  Keyboard,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
-  type KeyboardEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PrimaryButton } from "@/src/components/PrimaryButton";
+import { useKeyboardInset } from "@/src/keyboard/useKeyboardInset";
 import { colors } from "@/src/theme/colors";
 
 type Props = {
@@ -23,16 +20,6 @@ type Props = {
   onSubmit: (name: string) => Promise<void>;
 };
 
-/** How much of the keyboard still covers this window. Zero when the window already resized. */
-export function keyboardOverlap(event: KeyboardEvent): number {
-  const screenY = event.endCoordinates?.screenY ?? 0;
-  const height = event.endCoordinates?.height ?? 0;
-  if (screenY > 0) {
-    return Math.max(0, Dimensions.get("window").height - screenY);
-  }
-  return Platform.OS === "ios" ? height : 0;
-}
-
 export function CreateGroupSheet({
   visible,
   loading,
@@ -40,31 +27,16 @@ export function CreateGroupSheet({
   onSubmit,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<ComponentRef<typeof TextInput>>(null);
   const [name, setName] = useState("");
-  const [keyboardInset, setKeyboardInset] = useState(0);
+  const keyboardInset = useKeyboardInset(visible);
   const trimmed = name.trim();
 
   useEffect(() => {
-    if (!visible) {
-      setKeyboardInset(0);
-      return;
-    }
+    if (!visible) return;
     setName("");
     const focusTimer = setTimeout(() => inputRef.current?.focus(), 250);
-    const showEvent =
-      Platform.OS === "ios" ? "keyboardWillChangeFrame" : "keyboardDidShow";
-    const hideEvent =
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const showSub = Keyboard.addListener(showEvent, (event) => {
-      setKeyboardInset(keyboardOverlap(event));
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardInset(0));
-    return () => {
-      clearTimeout(focusTimer);
-      showSub.remove();
-      hideSub.remove();
-    };
+    return () => clearTimeout(focusTimer);
   }, [visible]);
 
   async function submit() {

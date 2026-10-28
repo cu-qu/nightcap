@@ -1,18 +1,10 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { requestPasswordReset } from "@/src/api/auth";
 import { ApiError } from "@/src/api/client";
+import { FieldInput, FormScroll } from "@/src/components/FormScroll";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { colors } from "@/src/theme/colors";
 
@@ -53,21 +45,14 @@ export default function ForgotPasswordScreen() {
 
   return (
     <Screen>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.flex}
-      >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
+      <FormScroll contentContainerStyle={styles.content} style={styles.flex}>
           <Text style={styles.brand}>Forgot password</Text>
           <Text style={styles.subtitle}>
             We’ll email a reset link from {FROM_ADDRESS}.
           </Text>
 
           <Text style={styles.label}>Email</Text>
-          <TextInput
+          <FieldInput
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
@@ -79,7 +64,7 @@ export default function ForgotPasswordScreen() {
           />
 
           <Text style={styles.label}>Username</Text>
-          <TextInput
+          <FieldInput
             autoCapitalize="none"
             autoCorrect={false}
             value={username}
@@ -109,8 +94,7 @@ export default function ForgotPasswordScreen() {
               <Text style={styles.footerLink}>Sign in</Text>
             </Pressable>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </FormScroll>
     </Screen>
   );
 }

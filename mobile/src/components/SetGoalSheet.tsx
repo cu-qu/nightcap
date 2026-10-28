@@ -6,11 +6,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 
 import { AddCategoryModal } from "@/src/components/AddCategoryModal";
+import { FieldInput, FormScroll } from "@/src/components/FormScroll";
 import { PrimaryButton } from "@/src/components/PrimaryButton";
 import { useAuthStore } from "@/src/store/authStore";
 import { useGroupsStore } from "@/src/store/groupsStore";
@@ -359,10 +359,7 @@ export function SetGoalSheet({
               onSubmit={onAddCategory}
             />
           ) : (
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
+            <FormScroll showsVerticalScrollIndicator={false}>
               <Text style={styles.title}>
                 {editing ? "Edit goal" : "Set a goal"}
               </Text>
@@ -398,6 +395,7 @@ export function SetGoalSheet({
                   <Text style={styles.label}>Measure</Text>
                   <View style={styles.segment}>
                     <Pressable
+                      testID="measure-boolean"
                       onPress={() => chooseMeasure("boolean")}
                       style={[
                         styles.segBtn,
@@ -414,6 +412,7 @@ export function SetGoalSheet({
                       </Text>
                     </Pressable>
                     <Pressable
+                      testID="measure-amount"
                       onPress={() => chooseMeasure("amount")}
                       style={[
                         styles.segBtn,
@@ -514,16 +513,13 @@ export function SetGoalSheet({
               {editing && !booleanGoal && measureUnits.length > 1 ? (
                 <>
                   <Text style={styles.label}>Unit</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.filterRow}
-                  >
+                  <View style={styles.catWrap}>
                     {measureUnits.map((option) => {
                       const on = selectedUnit?.id === option.id;
                       return (
                         <Pressable
                           key={option.id}
+                          testID={`unit-${option.id}`}
                           onPress={() => setUnitId(option.id)}
                           style={[styles.filterChip, on && styles.filterChipOn]}
                         >
@@ -538,7 +534,7 @@ export function SetGoalSheet({
                         </Pressable>
                       );
                     })}
-                  </ScrollView>
+                  </View>
                 </>
               ) : null}
               {measureChanged ? (
@@ -639,7 +635,8 @@ export function SetGoalSheet({
                         ? ` (${editing ? selectedUnit?.unit : selected?.unit})`
                         : ""}
                   </Text>
-                  <TextInput
+                  <FieldInput
+                    testID="goal-target"
                     value={target}
                     onChangeText={(t) => setTarget(sanitizeDecimalInput(t))}
                     keyboardType="decimal-pad"
@@ -710,7 +707,7 @@ export function SetGoalSheet({
                   <Text style={styles.cancelText}>Cancel</Text>
                 </Pressable>
               </View>
-            </ScrollView>
+            </FormScroll>
           )}
         </View>
       </View>
