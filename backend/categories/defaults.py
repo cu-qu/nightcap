@@ -137,6 +137,56 @@ DEFAULT_CATEGORIES = [
         "sort_order": 10,
     },
     {
+        "name": "Flights",
+        "type": TrackingCategory.FINANCE_EXPENSE,
+        "icon": "flights",
+        "emoji": "✈️",
+        "metric_kind": TrackingCategory.METRIC_AMOUNT,
+        "unit": "usd",
+        "group_key": CategoryGroup.KEY_DAILY_SPEND,
+        "sort_order": 11,
+    },
+    {
+        "name": "Hotels",
+        "type": TrackingCategory.FINANCE_EXPENSE,
+        "icon": "hotels",
+        "emoji": "🛎️",
+        "metric_kind": TrackingCategory.METRIC_AMOUNT,
+        "unit": "usd",
+        "group_key": CategoryGroup.KEY_DAILY_SPEND,
+        "sort_order": 12,
+    },
+    {
+        "name": "Car Rentals",
+        "type": TrackingCategory.FINANCE_EXPENSE,
+        "icon": "car_rentals",
+        "emoji": "🚗",
+        "metric_kind": TrackingCategory.METRIC_AMOUNT,
+        "unit": "usd",
+        "group_key": CategoryGroup.KEY_DAILY_SPEND,
+        "sort_order": 13,
+    },
+    {
+        "name": "Medical",
+        "type": TrackingCategory.FINANCE_EXPENSE,
+        "icon": "medical",
+        "emoji": "🏥",
+        "metric_kind": TrackingCategory.METRIC_AMOUNT,
+        "unit": "usd",
+        "group_key": CategoryGroup.KEY_DAILY_SPEND,
+        "sort_order": 14,
+    },
+    {
+        "name": "Prescription/Meds",
+        "type": TrackingCategory.FINANCE_EXPENSE,
+        "icon": "prescription_meds",
+        "emoji": "💊",
+        "metric_kind": TrackingCategory.METRIC_AMOUNT,
+        "unit": "usd",
+        "group_key": CategoryGroup.KEY_DAILY_SPEND,
+        "sort_order": 15,
+    },
+    {
         "name": "Water",
         "type": TrackingCategory.HABIT,
         "icon": "drop",
@@ -241,6 +291,25 @@ def sync_default_categories_for_user(user) -> int:
         legacy.group = None
         legacy.save(update_fields=["group", "updated_at"])
 
+    legacy_medical = TrackingCategory.objects.filter(
+        user=user,
+        name="Medical Expenses",
+        type=TrackingCategory.FINANCE_EXPENSE,
+    ).first()
+    if (
+        legacy_medical
+        and not TrackingCategory.objects.filter(
+            user=user,
+            name="Medical",
+            type=TrackingCategory.FINANCE_EXPENSE,
+        ).exists()
+    ):
+        legacy_medical.name = "Medical"
+        legacy_medical.icon = "medical"
+        if not legacy_medical.emoji:
+            legacy_medical.emoji = "🏥"
+        legacy_medical.save(update_fields=["name", "icon", "emoji", "updated_at"])
+
     created = 0
     for item in DEFAULT_CATEGORIES:
         fields = _category_fields(item)
@@ -268,7 +337,10 @@ def sync_default_categories_for_user(user) -> int:
             obj.group = group
             updates.extend(["group", "sort_order"])
             obj.sort_order = fields["sort_order"]
-        if fields["emoji"] and not obj.emoji:
+        if fields["name"] == "Hotels" and obj.emoji == "🏨":
+            obj.emoji = fields["emoji"]
+            updates.append("emoji")
+        elif fields["emoji"] and not obj.emoji:
             obj.emoji = fields["emoji"]
             updates.append("emoji")
         if updates:

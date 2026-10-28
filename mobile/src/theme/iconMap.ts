@@ -26,6 +26,12 @@ const GLYPH_BY_NAME: Record<string, string> = {
   Coffee: "☕",
   "House Supplies": "🏠",
   "Online Shopping": "🛍️",
+  Flights: "✈️",
+  Hotels: "🛎️",
+  "Car Rentals": "🚗",
+  Medical: "🏥",
+  "Medical Expenses": "🏥",
+  "Prescription/Meds": "💊",
   Clothes: "👕",
   Workout: "🏋️",
   "Workout time": "🏋️",
@@ -73,6 +79,11 @@ export const SPEND_ICON_KEYS = [
   "clothes",
   "gifts",
   "online_shopping",
+  "flights",
+  "hotels",
+  "car_rentals",
+  "medical",
+  "prescription_meds",
 ] as const;
 
 export const FOLLOW_UP_ICON_KEYS = [

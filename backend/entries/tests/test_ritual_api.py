@@ -36,7 +36,45 @@ class RitualApiTests(TestCase):
         )
         expected = {item["name"] for item in DEFAULT_CATEGORIES}
         self.assertEqual(names, expected)
-        self.assertEqual(len(DEFAULT_CATEGORIES), 13)
+        self.assertEqual(len(DEFAULT_CATEGORIES), 18)
+        travel = {
+            row.name: row.emoji
+            for row in TrackingCategory.objects.filter(
+                user=self.user,
+                name__in=[
+                    "Flights",
+                    "Hotels",
+                    "Car Rentals",
+                    "Medical",
+                    "Prescription/Meds",
+                ],
+            )
+        }
+        self.assertEqual(
+            travel,
+            {
+                "Flights": "✈️",
+                "Hotels": "🛎️",
+                "Car Rentals": "🚗",
+                "Medical": "🏥",
+                "Prescription/Meds": "💊",
+            },
+        )
+        spend_names = set(
+            TrackingCategory.objects.filter(
+                user=self.user, group__key="daily_spend"
+            ).values_list("name", flat=True)
+        )
+        self.assertTrue(
+            {
+                "Flights",
+                "Hotels",
+                "Car Rentals",
+                "Medical",
+                "Prescription/Meds",
+            }
+            <= spend_names
+        )
 
     def test_ritual_upsert_with_reflection_and_uuid(self):
         checkin = TrackingCategory.objects.create(
