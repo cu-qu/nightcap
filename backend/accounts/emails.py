@@ -164,3 +164,25 @@ class SharedGoalProposalEmail:
             tags=["shared-goal-proposal"],
         )
 
+
+@dataclass
+class SharedGoalChangeEmail:
+    """Ask a linked partner to approve a change to a Together goal."""
+
+    to_email: str
+    from_username: str
+    goal_name: str
+
+    def send(self) -> None:
+        send_transactional_mail(
+            subject="Your partner wants to change a shared goal",
+            text_template="emails/shared_goal_change.txt",
+            html_template="emails/shared_goal_change.html",
+            context={
+                "from_username": self.from_username,
+                "goal_name": self.goal_name,
+            },
+            to_email=self.to_email,
+            tags=["shared-goal-change"],
+        )
+

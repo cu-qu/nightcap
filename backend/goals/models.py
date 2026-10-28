@@ -82,6 +82,27 @@ class Goal(models.Model):
     )
     personal_snapshot_period = models.CharField(max_length=16, blank=True)
     personal_snapshot_direction = models.CharField(max_length=8, blank=True)
+    pending_target_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Proposed new target. The live target stays until both people agree.",
+    )
+    pending_period = models.CharField(max_length=16, blank=True)
+    pending_direction = models.CharField(max_length=8, blank=True)
+    pending_proposed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="goal_change_proposals",
+        help_text="Who asked to change this Together goal.",
+    )
+    change_accepted = models.BooleanField(
+        default=True,
+        help_text="This person has agreed to the pending change, when one exists.",
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -103,6 +124,33 @@ class Goal(models.Model):
     @property
     def display_name(self) -> str:
         return self.name or self.category.name
+
+
+class GoalTerm(models.Model):
+    """Metrics that applied from effective_on until the next term.
+
+    The first term is the original goal. Later terms start the day a change
+    is approved, so earlier days keep the previous target.
+    """
+
+    goal = models.ForeignKey(Goal, on_delete=models.CASCADE, related_name="terms")
+    target_value = models.DecimalField(max_digits=12, decimal_places=2)
+    period = models.CharField(max_length=16)
+    direction = models.CharField(max_length=8)
+    effective_on = models.DateField()
+
+    class Meta:
+        db_table = "goals_goal_term"
+        ordering = ["effective_on", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["goal", "effective_on"],
+                name="unique_goal_term_effective_on",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.goal_id} {self.period} {self.target_value} from {self.effective_on}"
 
 
 class GoalTemplate(models.Model):

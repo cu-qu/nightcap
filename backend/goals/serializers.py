@@ -167,7 +167,9 @@ class PendingTogetherGoalSerializer(serializers.Serializer):
     category_emoji = serializers.CharField(allow_blank=True)
     category_icon = serializers.CharField(allow_blank=True)
     target_label = serializers.CharField()
+    current_target_label = serializers.CharField(allow_blank=True, required=False)
     period = serializers.CharField()
+    kind = serializers.ChoiceField(choices=["new", "change"], required=False)
     proposed_by_username = serializers.CharField(allow_blank=True)
     partner_username = serializers.CharField(allow_blank=True)
     status = serializers.ChoiceField(choices=["needs_you", "waiting_on_partner"])
@@ -364,20 +366,71 @@ class GoalSerializer(serializers.ModelSerializer):
         return goal
 
     def update(self, instance, validated_data):
+        from goals.onboarding_services import (
+            _clear_pending_change,
+            clear_shared_goal_change,
+            mirror_shared_goal,
+            propose_shared_goal_change,
+            release_other_shared_copies,
+        )
+        from goals.services import shared_goal_is_live
+
         leaving_shared = (
             instance.scope == Goal.SCOPE_SHARED
             and validated_data.get("scope", instance.scope) == Goal.SCOPE_PERSONAL
         )
         if leaving_shared:
-            from goals.onboarding_services import release_other_shared_copies
-
             release_other_shared_copies(instance)
+        live_edit = (
+            not leaving_shared
+            and instance.scope == Goal.SCOPE_SHARED
+            and shared_goal_is_live(instance)
+        )
+        touched = any(
+            key in validated_data for key in ("target_value", "period", "direction")
+        )
+        next_target = validated_data.get("target_value", instance.target_value)
+        next_period = validated_data.get("period", instance.period)
+        next_direction = validated_data.get("direction", instance.direction)
+        metrics_changed = touched and (
+            instance.target_value != next_target
+            or instance.period != next_period
+            or instance.direction != next_direction
+        )
+        stage_change = None
+        cancel_change = False
+        if live_edit and touched:
+            for key in ("target_value", "period", "direction"):
+                validated_data.pop(key, None)
+            if metrics_changed:
+                stage_change = (next_target, next_period, next_direction)
+            elif instance.pending_period:
+                cancel_change = True
         self._apply_scope_partnership(validated_data)
         goal = super().update(instance, validated_data)
         if leaving_shared:
+            pending_fields = _clear_pending_change(goal)
             goal.proposed_by = None
             goal.accepted = True
-            goal.save(update_fields=["proposed_by", "accepted", "updated_at"])
+            goal.save(
+                update_fields=["proposed_by", "accepted", *pending_fields, "updated_at"]
+            )
+            return goal
+        if stage_change is not None:
+            request = self.context.get("request")
+            proposer = request.user if request is not None else goal.user
+            propose_shared_goal_change(
+                goal,
+                target_value=stage_change[0],
+                period=stage_change[1],
+                direction=stage_change[2],
+                proposer=proposer,
+            )
+            goal.refresh_from_db()
+            return goal
+        if cancel_change:
+            clear_shared_goal_change(goal)
+            goal.refresh_from_db()
             return goal
         if goal.scope == Goal.SCOPE_SHARED:
             request = self.context.get("request")
@@ -385,8 +438,6 @@ class GoalSerializer(serializers.ModelSerializer):
                 goal.proposed_by = request.user
                 goal.accepted = True
                 goal.save(update_fields=["proposed_by", "accepted", "updated_at"])
-            from goals.onboarding_services import mirror_shared_goal
-
             mirror_shared_goal(goal)
         return goal
 

@@ -50,7 +50,9 @@ function useReminderObserver() {
       const data = notification.request.content.data ?? {};
       const url = data.url;
       const isNudge = data.type === "partner_nudge";
-      const isSharedGoal = data.type === "shared_goal_proposal";
+      const isSharedGoal =
+        data.type === "shared_goal_proposal" ||
+        data.type === "shared_goal_change";
       if (
         typeof url !== "string" ||
         (url !== REMINDER_PATH && !isNudge && !isSharedGoal)

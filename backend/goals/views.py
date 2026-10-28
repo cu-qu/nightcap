@@ -111,15 +111,21 @@ class GoalViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=["post"], url_path="accept")
     def accept(self, request, pk=None):
+        from goals.onboarding_services import accept_shared_goal, apply_shared_goal_change
+        from goals.services import shared_goal_is_live
+
         goal = self.get_object()
         if goal.scope != Goal.SCOPE_SHARED:
             return Response(
                 {"detail": "Only Together goals can be approved."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if goal.pending_period and shared_goal_is_live(goal):
+            if not goal.change_accepted:
+                apply_shared_goal_change(goal)
+            goal.refresh_from_db()
+            return Response(self.get_serializer(goal).data)
         goal.accepted = True
-        from goals.onboarding_services import accept_shared_goal
-
         accept_shared_goal(goal)
         goal.refresh_from_db()
         return Response(self.get_serializer(goal).data)
@@ -136,7 +142,10 @@ class GoalViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=["post"], url_path="decline")
     def decline(self, request, pk=None):
-        from goals.onboarding_services import withdraw_together_proposal
+        from goals.onboarding_services import (
+            clear_shared_goal_change,
+            withdraw_together_proposal,
+        )
         from goals.services import shared_goal_is_live
 
         goal = self.get_object()
@@ -145,6 +154,9 @@ class GoalViewSet(viewsets.ModelViewSet):
                 {"detail": "Only Together goals can be declined."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if goal.pending_period and shared_goal_is_live(goal):
+            clear_shared_goal_change(goal)
+            return Response(status=status.HTTP_204_NO_CONTENT)
         if shared_goal_is_live(goal):
             return Response(
                 {"detail": "This together goal is already approved. Remove it instead."},

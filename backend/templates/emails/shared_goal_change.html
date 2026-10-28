@@ -1,0 +1,7 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Your partner wants to change a shared goal{% endblock %}
+{% block preheader %}{{ from_username }} wants to change a shared goal: {{ goal_name }}{% endblock %}
+{% block headline %}Your partner wants to change a shared goal{% endblock %}
+{% block content %}{{ from_username }} wants to change a shared goal: {{ goal_name }}. The current goal stays in place until you both agree. After you approve it, the new goal only counts from that day forward.{% endblock %}
+{% block note %}Open NightCap to approve the change or leave the current goal as it is.{% endblock %}

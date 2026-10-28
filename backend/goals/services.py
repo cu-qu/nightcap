@@ -6,13 +6,17 @@ from datetime import date, timedelta
 from decimal import Decimal
 from functools import reduce
 
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Prefetch, Q, Sum
 from django.utils import timezone
 
 from categories.models import TrackingCategory
 from entries.models import Entry
 
-from .models import Goal
+from .models import Goal, GoalTerm
+
+# Original terms start here so a goal created mid-period still counts the whole period.
+# A later term starts the day a change is approved and only counts from that day.
+TERM_ORIGIN = date(1970, 1, 1)
 
 
 @dataclass
@@ -107,13 +111,17 @@ def build_progress(
     period_end: date,
     target_value: Decimal,
     current_value: Decimal,
+    period: str | None = None,
+    direction: str | None = None,
 ) -> GoalProgress:
+    period = period or goal.period
+    direction = direction or goal.direction
     if target_value > 0:
         percent_used = float((current_value / target_value) * 100)
     else:
         percent_used = 0.0
     remaining_value = target_value - current_value
-    if goal.direction == Goal.DIRECTION_MIN:
+    if direction == Goal.DIRECTION_MIN:
         remaining_value = max(Decimal("0"), target_value - current_value)
     return GoalProgress(
         goal_id=goal.id,
@@ -121,17 +129,108 @@ def build_progress(
         category_id=goal.category_id,
         category_uuid=str(goal.category.uuid),
         category_name=goal.category.name,
-        period=goal.period,
+        period=period,
         period_start=period_start,
         period_end=period_end,
-        direction=goal.direction,
+        direction=direction,
         target_value=target_value,
         current_value=current_value,
         remaining_value=remaining_value,
         percent_used=round(percent_used, 2),
-        status=_compute_status(goal.direction, percent_used, goal.warn_at_percent),
+        status=_compute_status(direction, percent_used, goal.warn_at_percent),
         warn_at_percent=goal.warn_at_percent,
     )
+
+
+def _goal_terms(goal: Goal) -> list[GoalTerm]:
+    cache = getattr(goal, "_prefetched_objects_cache", None)
+    if cache is not None and "terms" in cache:
+        return list(goal.terms.all())
+    return list(GoalTerm.objects.filter(goal=goal).order_by("effective_on", "id"))
+
+
+def _term_covering(goal: Goal, day: date) -> GoalTerm | None:
+    chosen = None
+    for term in _goal_terms(goal):
+        if term.effective_on <= day:
+            chosen = term
+        elif chosen is not None:
+            break
+    return chosen
+
+
+def _previous_term(goal: Goal, term: GoalTerm) -> GoalTerm | None:
+    previous = None
+    for item in _goal_terms(goal):
+        if item.pk == term.pk:
+            return previous
+        previous = item
+    return previous
+
+
+def _next_term(goal: Goal, term: GoalTerm) -> GoalTerm | None:
+    found = False
+    for item in _goal_terms(goal):
+        if found:
+            return item
+        if item.pk == term.pk:
+            found = True
+    return None
+
+
+def ensure_origin_term(goal: Goal) -> None:
+    """Keep the pre-change metrics so earlier days are not re-scored."""
+    if GoalTerm.objects.filter(goal=goal).exists():
+        return
+    GoalTerm.objects.create(
+        goal=goal,
+        target_value=goal.target_value,
+        period=goal.period,
+        direction=goal.direction,
+        effective_on=TERM_ORIGIN,
+    )
+
+
+def start_goal_term(
+    goal: Goal,
+    *,
+    target_value: Decimal,
+    period: str,
+    direction: str,
+    effective_on: date,
+) -> GoalTerm:
+    ensure_origin_term(goal)
+    term, _ = GoalTerm.objects.update_or_create(
+        goal=goal,
+        effective_on=effective_on,
+        defaults={
+            "target_value": target_value,
+            "period": period,
+            "direction": direction,
+        },
+    )
+    return term
+
+
+def metric_slice(goal: Goal, reference_date: date) -> tuple[str, str, Decimal, date, date]:
+    """Period, direction, target, and the entry window for this day.
+
+    Days before an approved change keep the previous target. The new target
+    counts only from the day both people agreed.
+    """
+    term = _term_covering(goal, reference_date)
+    if term is None:
+        start, end = get_period_bounds(goal.period, reference_date)
+        return goal.period, goal.direction, goal.target_value, start, end
+    start, end = get_period_bounds(term.period, reference_date)
+    previous = _previous_term(goal, term)
+    if previous is not None and start < term.effective_on <= end:
+        start = term.effective_on
+    following = _next_term(goal, term)
+    if following is not None and start <= following.effective_on <= end:
+        # The next goal starts that day, so this one stops the day before.
+        end = following.effective_on - timedelta(days=1)
+    return term.period, term.direction, term.target_value, start, end
 
 
 def scale_weekly_goal_to_month(
@@ -152,14 +251,23 @@ def scale_weekly_goal_to_month(
     if weeks_in_month < 1:
         weeks_in_month = 1
     base_target = goal.target_value
+    count_start = month_start
+    term = _term_covering(goal, reference_date)
+    if term is not None and term.period == Goal.PERIOD_WEEKLY:
+        base_target = term.target_value
+        previous = _previous_term(goal, term)
+        if previous is not None and month_start < term.effective_on <= month_end:
+            count_start = term.effective_on
     month_target = base_target * weeks_in_month
-    current_value = aggregate_goal_entries(goal, month_start, month_end)
+    current_value = aggregate_goal_entries(goal, count_start, month_end)
     progress = build_progress(
         goal=goal,
         period_start=month_start,
         period_end=month_end,
         target_value=month_target,
         current_value=current_value,
+        period=Goal.PERIOD_MONTHLY,
+        direction=term.direction if term is not None else goal.direction,
     )
     return progress, weeks_in_month, base_target
 
@@ -309,14 +417,24 @@ def _compute_status(direction: str, percent_used: float, warn_at_percent: int) -
 
 def compute_goal_progress(goal: Goal, reference_date: date | None = None) -> GoalProgress:
     reference_date = reference_date or timezone.localdate()
-    period_start, period_end = get_period_bounds(goal.period, reference_date)
+    period, direction, target_value, period_start, period_end = metric_slice(
+        goal, reference_date
+    )
     current_value = aggregate_goal_entries(goal, period_start, period_end)
     return build_progress(
         goal=goal,
         period_start=period_start,
         period_end=period_end,
-        target_value=goal.target_value,
+        target_value=target_value,
         current_value=current_value,
+        period=period,
+        direction=direction,
+    )
+
+
+def _with_terms(queryset):
+    return queryset.prefetch_related(
+        Prefetch("terms", queryset=GoalTerm.objects.order_by("effective_on", "id"))
     )
 
 
@@ -325,7 +443,7 @@ def compute_all_goal_progress(user, reference_date: date | None = None) -> list[
 
     partnership = get_user_partnership(user)
     live_keys = mutually_accepted_category_keys(partnership.id if partnership else None)
-    goals = (
+    goals = _with_terms(
         Goal.objects.filter(user=user, is_active=True)
         .exclude(scope=Goal.SCOPE_SHARED, accepted=False)
         .select_related("category", "partnership")
@@ -353,9 +471,9 @@ MODE_PASS = "pass"
 MODE_COMPLETED = "completed"
 
 
-def goal_mode(goal: Goal) -> str:
+def goal_mode(goal: Goal, direction: str | None = None) -> str:
     """Map direction + metric to simple UX modes."""
-    if goal.direction == Goal.DIRECTION_MAX:
+    if (direction or goal.direction) == Goal.DIRECTION_MAX:
         return MODE_STAY_UNDER
     if goal.category.metric_kind == TrackingCategory.METRIC_BOOLEAN:
         return MODE_COMPLETED
@@ -531,7 +649,7 @@ def compute_group_goal_summary(
         partnership.id if partnership else None
     )
 
-    goals = (
+    goals = _with_terms(
         Goal.objects.filter(user=user, is_active=True)
         .exclude(scope=Goal.SCOPE_SHARED, accepted=False)
         .select_related("category", "category__group", "partnership")
@@ -613,9 +731,9 @@ def compute_group_goal_summary(
         else:
             progress = compute_goal_progress(goal, reference_date=reference_date)
 
-        mode = goal_mode(goal)
+        mode = goal_mode(goal, progress.direction)
         health = goal_health(
-            goal.direction, progress.percent_used, goal.warn_at_percent
+            progress.direction, progress.percent_used, goal.warn_at_percent
         )
         group = goal.category.group
         bucket_key = str(group.uuid) if group else None
@@ -629,11 +747,11 @@ def compute_group_goal_summary(
             "display_name": goal.display_name,
             "mode": mode,
             "health": health,
-            "period": goal.period,
+            "period": goal.period if rolls_into_month else progress.period,
             "rolls_into_month": rolls_into_month,
             "weeks_in_month": weeks_in_month,
             "base_target_value": base_target_value,
-            "direction": goal.direction,
+            "direction": progress.direction,
             "target_value": progress.target_value,
             "current_value": progress.current_value,
             "remaining_value": progress.remaining_value,
@@ -660,7 +778,7 @@ def compute_group_goal_summary(
                 "period_start": weekly_native.period_start,
                 "period_end": weekly_native.period_end,
                 "health": goal_health(
-                    goal.direction,
+                    weekly_native.direction,
                     weekly_native.percent_used,
                     goal.warn_at_percent,
                 ),

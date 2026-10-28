@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -18,6 +18,7 @@ from categories.defaults import create_default_categories_for_user
 from categories.models import TrackingCategory
 from entries.models import Entry
 from goals.models import Goal
+from goals.services import compute_goal_progress
 from goals.template_catalog import seed_goal_templates
 
 
@@ -935,3 +936,117 @@ class SharedGoalProgressTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             partner_client.get("/api/v1/goals/pending/")
         mock_push.assert_not_called()
+
+    @patch("accounts.nudges._send_apns", return_value=True)
+    @patch("accounts.emails.SharedGoalChangeEmail.send")
+    def test_shared_goal_change_keeps_the_current_goal_until_both_agree(
+        self, mock_email, mock_push
+    ):
+        partner_client = self._join_as_couple(
+            [{"slug": "groceries-monthly-max", "scope": "shared"}]
+        )
+        cat_a = TrackingCategory.objects.get(user=self.a, name="Groceries")
+        cat_b = TrackingCategory.objects.get(user=self.b, name="Groceries")
+        Entry.objects.create(
+            user=self.a, category=cat_a, date=date(2026, 9, 10), amount=Decimal("80.00")
+        )
+        Entry.objects.create(
+            user=self.a, category=cat_a, date=date(2026, 10, 1), amount=Decimal("30.00")
+        )
+        Entry.objects.create(
+            user=self.a, category=cat_a, date=date(2026, 10, 15), amount=Decimal("10.00")
+        )
+        DevicePushToken.objects.create(
+            user=self.b,
+            token="ab" * 32,
+            platform="ios",
+            environment="sandbox",
+        )
+        payload = {
+            "category_uuid": str(cat_a.uuid),
+            "target_value": "200.00",
+            "period": "weekly",
+            "direction": "max",
+            "scope": "shared",
+        }
+        with self.captureOnCommitCallbacks(execute=True):
+            changed = self.client.post("/api/v1/goals/set/", payload, format="json")
+        self.assertEqual(changed.status_code, 200, changed.content)
+        mock_push.assert_called_once()
+        self.assertEqual(
+            mock_push.call_args.kwargs["body"],
+            "Your partner wants to change a shared goal: Groceries budget",
+        )
+        self.assertEqual(mock_push.call_args.kwargs["data"]["type"], "shared_goal_change")
+        mock_email.assert_not_called()
+
+        owner = Goal.objects.get(user=self.a, category=cat_a, is_active=True)
+        partner = Goal.objects.get(user=self.b, category=cat_b, is_active=True)
+        self.assertEqual(owner.target_value, Decimal("400.00"))
+        self.assertEqual(owner.period, Goal.PERIOD_MONTHLY)
+        self.assertEqual(partner.target_value, Decimal("400.00"))
+        self.assertEqual(partner.pending_target_value, Decimal("200.00"))
+        self.assertEqual(partner.pending_period, Goal.PERIOD_WEEKLY)
+        self.assertFalse(partner.change_accepted)
+
+        before = compute_goal_progress(owner, reference_date=date(2026, 10, 15))
+        self.assertEqual(before.target_value, Decimal("400.00"))
+        self.assertEqual(before.current_value, Decimal("40.00"))
+
+        waiting = self.client.get("/api/v1/goals/pending/")
+        needs = partner_client.get("/api/v1/goals/pending/")
+        self.assertEqual(waiting.json()[0]["status"], "waiting_on_partner")
+        self.assertEqual(waiting.json()[0]["kind"], "change")
+        self.assertEqual(needs.json()[0]["status"], "needs_you")
+        self.assertEqual(needs.json()[0]["current_target_label"], "$400 / month")
+        self.assertEqual(needs.json()[0]["target_label"], "$200 / week")
+
+        mock_push.reset_mock()
+        with self.captureOnCommitCallbacks(execute=True):
+            again = self.client.post("/api/v1/goals/set/", payload, format="json")
+        self.assertEqual(again.status_code, 200, again.content)
+        mock_push.assert_not_called()
+
+        declined = partner_client.post(f"/api/v1/goals/{partner.id}/decline/")
+        self.assertEqual(declined.status_code, 204, declined.content)
+        owner.refresh_from_db()
+        partner.refresh_from_db()
+        self.assertEqual(owner.target_value, Decimal("400.00"))
+        self.assertEqual(owner.period, Goal.PERIOD_MONTHLY)
+        self.assertEqual(partner.pending_period, "")
+        self.assertEqual(partner_client.get("/api/v1/goals/pending/").json(), [])
+        still = compute_goal_progress(owner, reference_date=date(2026, 10, 15))
+        self.assertEqual(still.current_value, Decimal("40.00"))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post("/api/v1/goals/set/", payload, format="json")
+        partner.refresh_from_db()
+        with patch(
+            "goals.onboarding_services.timezone.localdate",
+            return_value=date(2026, 10, 15),
+        ):
+            accepted = partner_client.post(f"/api/v1/goals/{partner.id}/accept/")
+        self.assertEqual(accepted.status_code, 200, accepted.content)
+        owner.refresh_from_db()
+        partner.refresh_from_db()
+        self.assertEqual(owner.target_value, Decimal("200.00"))
+        self.assertEqual(owner.period, Goal.PERIOD_WEEKLY)
+        self.assertEqual(partner.target_value, Decimal("200.00"))
+        self.assertEqual(partner.pending_period, "")
+
+        forward = compute_goal_progress(owner, reference_date=date(2026, 10, 15))
+        self.assertEqual(forward.period, Goal.PERIOD_WEEKLY)
+        self.assertEqual(forward.target_value, Decimal("200.00"))
+        self.assertEqual(forward.current_value, Decimal("10.00"))
+        self.assertEqual(forward.period_start, date(2026, 10, 15))
+
+        earlier_in_month = compute_goal_progress(owner, reference_date=date(2026, 10, 1))
+        self.assertEqual(earlier_in_month.period, Goal.PERIOD_MONTHLY)
+        self.assertEqual(earlier_in_month.target_value, Decimal("400.00"))
+        self.assertEqual(earlier_in_month.current_value, Decimal("30.00"))
+        self.assertEqual(earlier_in_month.period_end, date(2026, 10, 14))
+
+        last_month = compute_goal_progress(owner, reference_date=date(2026, 9, 15))
+        self.assertEqual(last_month.period, Goal.PERIOD_MONTHLY)
+        self.assertEqual(last_month.target_value, Decimal("400.00"))
+        self.assertEqual(last_month.current_value, Decimal("80.00"))

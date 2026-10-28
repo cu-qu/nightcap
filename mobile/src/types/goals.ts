@@ -104,7 +104,9 @@ export type PendingTogetherGoal = {
   category_emoji: string;
   category_icon: string;
   target_label: string;
+  current_target_label?: string;
   period: "daily" | "weekly" | "monthly";
+  kind?: "new" | "change";
   proposed_by_username: string;
   partner_username: string;
   status: "needs_you" | "waiting_on_partner";

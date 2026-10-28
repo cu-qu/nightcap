@@ -162,15 +162,46 @@ def send_partner_nudge(user, day: date) -> dict:
     return serialize_nudge(nudge, already_sent=False)
 
 
+def notify_shared_goal_change(*, proposer, recipient, goal) -> None:
+    """Tell someone their partner wants to change a Together goal."""
+    _notify_shared_goal(
+        proposer=proposer,
+        recipient=recipient,
+        goal=goal,
+        body_prefix="Your partner wants to change a shared goal",
+        data_type="shared_goal_change",
+        email_cls_name="SharedGoalChangeEmail",
+    )
+
+
 def notify_shared_goal_proposal(*, proposer, recipient, goal) -> None:
     """Tell someone their partner proposed a Together goal."""
+    _notify_shared_goal(
+        proposer=proposer,
+        recipient=recipient,
+        goal=goal,
+        body_prefix="Your partner wants to create a new shared goal",
+        data_type="shared_goal_proposal",
+        email_cls_name="SharedGoalProposalEmail",
+    )
+
+
+def _notify_shared_goal(
+    *,
+    proposer,
+    recipient,
+    goal,
+    body_prefix: str,
+    data_type: str,
+    email_cls_name: str,
+) -> None:
     if proposer is None or recipient is None or proposer.pk == recipient.pk:
         return
     goal_name = (getattr(goal, "display_name", "") or "a goal").strip()
     title = "NightCap"
-    body = f"Your partner wants to create a new shared goal: {goal_name}"
+    body = f"{body_prefix}: {goal_name}"
     data = {
-        "type": "shared_goal_proposal",
+        "type": data_type,
         "url": GOALS_PATH,
         "goal_uuid": str(goal.uuid),
     }
@@ -187,15 +218,16 @@ def notify_shared_goal_proposal(*, proposer, recipient, goal) -> None:
         if pushed:
             return
         try:
-            from accounts.emails import SharedGoalProposalEmail
+            from accounts import emails as email_module
 
-            SharedGoalProposalEmail(
+            email_cls = getattr(email_module, email_cls_name)
+            email_cls(
                 to_email=recipient.email,
                 from_username=proposer.username,
                 goal_name=goal_name,
             ).send()
         except Exception:
-            logger.exception("Could not email a shared goal proposal.")
+            logger.exception("Could not email a shared goal update.")
 
     from django.db import transaction
 

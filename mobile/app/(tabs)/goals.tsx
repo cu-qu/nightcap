@@ -151,6 +151,7 @@ export default function GoalsScreen() {
             <Text style={styles.sectionTitle}>Needs approval</Text>
             <Text style={styles.pendingLead}>
               A together goal counts for both of you only after you each approve it.
+              A change keeps the current goal until then.
             </Text>
             {pending.map((goal) => (
               <PendingTogetherCard
@@ -227,8 +228,10 @@ function PendingTogetherCard({
   onDecline: () => void;
 }) {
   const waiting = goal.status === "waiting_on_partner";
+  const change = goal.kind === "change";
   const partner = goal.partner_username || "your partner";
   const proposer = goal.proposed_by_username || "Your partner";
+  const current = goal.current_target_label;
   return (
     <View style={styles.pendingCard}>
       <View style={styles.topRow}>
@@ -243,11 +246,19 @@ function PendingTogetherCard({
           <Text style={styles.pendingName} numberOfLines={1}>
             {goal.display_name}
           </Text>
-          <Text style={styles.pendingMeta}>{goal.target_label}</Text>
+          <Text style={styles.pendingMeta}>
+            {change && current
+              ? `${current} → ${goal.target_label}`
+              : goal.target_label}
+          </Text>
           <Text style={styles.pendingSub}>
-            {waiting
-              ? `Waiting for ${partner} to approve.`
-              : `${proposer} wants this together.`}
+            {change
+              ? waiting
+                ? `Waiting for ${partner} to approve this change. It stays ${current} until then.`
+                : `${proposer} wants to change this. It stays ${current} until you both agree.`
+              : waiting
+                ? `Waiting for ${partner} to approve.`
+                : `${proposer} wants this together.`}
           </Text>
         </View>
       </View>
@@ -258,10 +269,14 @@ function PendingTogetherCard({
             disabled={busy}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel={`Cancel together request for ${goal.display_name}`}
+            accessibilityLabel={
+              change
+                ? `Cancel change for ${goal.display_name}`
+                : `Cancel together request for ${goal.display_name}`
+            }
           >
             <Text style={styles.removeText}>
-              {busy ? "Canceling…" : "Cancel request"}
+              {busy ? "Canceling…" : change ? "Cancel change" : "Cancel request"}
             </Text>
           </Pressable>
         ) : (
@@ -279,10 +294,16 @@ function PendingTogetherCard({
               onPress={onDecline}
               disabled={busy}
               hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={`Skip ${goal.display_name}`}
-            >
-              <Text style={styles.removeText}>{busy ? "Saving…" : "Not now"}</Text>
+            accessibilityRole="button"
+            accessibilityLabel={
+              change
+                ? `Keep ${goal.display_name} as it is`
+                : `Skip ${goal.display_name}`
+            }
+          >
+            <Text style={styles.removeText}>
+              {busy ? "Saving…" : change ? "Keep current" : "Not now"}
+            </Text>
             </Pressable>
           </>
         )}

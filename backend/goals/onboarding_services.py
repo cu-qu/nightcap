@@ -125,6 +125,21 @@ def _clear_personal_snapshot(goal: Goal) -> None:
     goal.personal_snapshot_direction = ""
 
 
+def _clear_pending_change(goal: Goal) -> list[str]:
+    goal.pending_target_value = None
+    goal.pending_period = ""
+    goal.pending_direction = ""
+    goal.pending_proposed_by = None
+    goal.change_accepted = True
+    return [
+        "pending_target_value",
+        "pending_period",
+        "pending_direction",
+        "pending_proposed_by",
+        "change_accepted",
+    ]
+
+
 def accept_shared_goal(goal: Goal) -> None:
     goal.accepted = True
     _clear_personal_snapshot(goal)
@@ -145,6 +160,7 @@ def _keep_as_personal(goal: Goal) -> None:
     goal.proposed_by = None
     goal.accepted = True
     _clear_personal_snapshot(goal)
+    pending_fields = _clear_pending_change(goal)
     goal.save(
         update_fields=[
             "scope",
@@ -154,6 +170,7 @@ def _keep_as_personal(goal: Goal) -> None:
             "personal_snapshot_target",
             "personal_snapshot_period",
             "personal_snapshot_direction",
+            *pending_fields,
             "updated_at",
         ]
     )
@@ -171,6 +188,7 @@ def _restore_or_drop_copy(goal: Goal) -> None:
         goal.accepted = True
         goal.is_active = True
         _clear_personal_snapshot(goal)
+        pending_fields = _clear_pending_change(goal)
         goal.save(
             update_fields=[
                 "scope",
@@ -184,13 +202,15 @@ def _restore_or_drop_copy(goal: Goal) -> None:
                 "personal_snapshot_target",
                 "personal_snapshot_period",
                 "personal_snapshot_direction",
+                *pending_fields,
                 "updated_at",
             ]
         )
         return
     goal.is_active = False
     goal.partnership = None
-    goal.save(update_fields=["is_active", "partnership", "updated_at"])
+    pending_fields = _clear_pending_change(goal)
+    goal.save(update_fields=["is_active", "partnership", *pending_fields, "updated_at"])
 
 
 def _shared_copies(goal: Goal):
@@ -218,6 +238,103 @@ def withdraw_together_proposal(goal: Goal) -> None:
             _keep_as_personal(item)
         else:
             _restore_or_drop_copy(item)
+
+
+def clear_shared_goal_change(goal: Goal) -> None:
+    """Drop a proposed change. The live goal stays as it is."""
+    if not goal.partnership_id:
+        fields = _clear_pending_change(goal)
+        goal.save(update_fields=[*fields, "updated_at"])
+        return
+    for copy in _shared_copies(goal):
+        fields = _clear_pending_change(copy)
+        copy.save(update_fields=[*fields, "updated_at"])
+
+
+def propose_shared_goal_change(
+    goal: Goal,
+    *,
+    target_value: Decimal,
+    period: str,
+    direction: str,
+    proposer,
+) -> None:
+    """Ask the other person to approve new metrics. The current goal stays live."""
+    if not isinstance(target_value, Decimal):
+        target_value = Decimal(str(target_value))
+    same_as_live = (
+        goal.target_value == target_value
+        and goal.period == period
+        and goal.direction == direction
+    )
+    if same_as_live:
+        if goal.pending_period:
+            clear_shared_goal_change(goal)
+        return
+    same_request = (
+        goal.pending_period == period
+        and goal.pending_direction == direction
+        and goal.pending_target_value == target_value
+        and goal.pending_proposed_by_id == getattr(proposer, "pk", None)
+    )
+    copies = _shared_copies(goal)
+    for copy in copies:
+        copy.pending_target_value = target_value
+        copy.pending_period = period
+        copy.pending_direction = direction
+        copy.pending_proposed_by = proposer
+        copy.change_accepted = copy.user_id == getattr(proposer, "pk", None)
+        copy.save(
+            update_fields=[
+                "pending_target_value",
+                "pending_period",
+                "pending_direction",
+                "pending_proposed_by",
+                "change_accepted",
+                "updated_at",
+            ]
+        )
+    if same_request:
+        return
+    from accounts.nudges import notify_shared_goal_change
+
+    for copy in copies:
+        if copy.user_id == getattr(proposer, "pk", None):
+            continue
+        notify_shared_goal_change(proposer=proposer, recipient=copy.user, goal=copy)
+
+
+def apply_shared_goal_change(goal: Goal) -> None:
+    """Both people agreed. New metrics count from today; earlier days stay put."""
+    if not goal.pending_period or goal.pending_target_value is None:
+        return
+    from goals.services import start_goal_term
+
+    today = timezone.localdate()
+    target = goal.pending_target_value
+    period = goal.pending_period
+    direction = goal.pending_direction or goal.direction
+    for copy in _shared_copies(goal):
+        start_goal_term(
+            copy,
+            target_value=target,
+            period=period,
+            direction=direction,
+            effective_on=today,
+        )
+        copy.target_value = target
+        copy.period = period
+        copy.direction = direction
+        pending_fields = _clear_pending_change(copy)
+        copy.save(
+            update_fields=[
+                "target_value",
+                "period",
+                "direction",
+                *pending_fields,
+                "updated_at",
+            ]
+        )
 
 
 def release_other_shared_copies(goal: Goal) -> None:
@@ -248,6 +365,27 @@ def _upsert_goal_for_category(
     proposed_by=None,
 ) -> tuple[Goal, bool]:
     existing = Goal.objects.filter(user=user, category=category, is_active=True).first()
+    if (
+        existing is not None
+        and scope == Goal.SCOPE_SHARED
+        and existing.scope == Goal.SCOPE_SHARED
+        and (
+            existing.target_value != target_value
+            or existing.period != period
+            or existing.direction != direction
+        )
+    ):
+        from goals.services import shared_goal_is_live
+
+        if shared_goal_is_live(existing):
+            propose_shared_goal_change(
+                existing,
+                target_value=target_value,
+                period=period,
+                direction=direction,
+                proposer=proposed_by or existing.user,
+            )
+            return existing, False
     previously_personal = existing is not None and existing.scope != Goal.SCOPE_SHARED
     snapshot = None
     if previously_personal and existing is not None:
@@ -488,14 +626,15 @@ def _onboarding_group_for_goal(goal: Goal) -> str:
     return GoalTemplate.GROUP_HABIT
 
 
-def _target_label(goal: Goal) -> str:
+def _target_label(goal: Goal, *, target=None, period: str | None = None) -> str:
     category = goal.category
-    target = goal.target_value
+    target = goal.target_value if target is None else target
+    period_key = goal.period if period is None else period
     period = {
         Goal.PERIOD_DAILY: "day",
         Goal.PERIOD_WEEKLY: "week",
         Goal.PERIOD_MONTHLY: "month",
-    }.get(goal.period, goal.period)
+    }.get(period_key, period_key)
     if category.metric_kind == TrackingCategory.METRIC_AMOUNT or category.type in (
         TrackingCategory.FINANCE_EXPENSE,
         TrackingCategory.FINANCE_INCOME,
@@ -600,10 +739,37 @@ def list_pending_together_goals(user) -> list[dict]:
         partnership=partnership,
         scope=Goal.SCOPE_SHARED,
         is_active=True,
-    ).select_related("category", "proposed_by")
+    ).select_related("category", "proposed_by", "pending_proposed_by")
     rows = []
     for goal in goals:
-        if (goal.category.name, goal.category.type) in live:
+        key = (goal.category.name, goal.category.type)
+        if goal.pending_period and key in live:
+            proposer = goal.pending_proposed_by
+            rows.append(
+                {
+                    "id": goal.id,
+                    "uuid": goal.uuid,
+                    "display_name": goal.display_name,
+                    "category_name": goal.category.name,
+                    "category_emoji": (goal.category.emoji or "").strip(),
+                    "category_icon": goal.category.icon or "",
+                    "target_label": _target_label(
+                        goal,
+                        target=goal.pending_target_value,
+                        period=goal.pending_period,
+                    ),
+                    "current_target_label": _target_label(goal),
+                    "period": goal.pending_period,
+                    "kind": "change",
+                    "proposed_by_username": proposer.username if proposer else "",
+                    "partner_username": partner_name,
+                    "status": (
+                        "needs_you" if not goal.change_accepted else "waiting_on_partner"
+                    ),
+                }
+            )
+            continue
+        if key in live:
             continue
         proposer = goal.proposed_by
         rows.append(
@@ -615,7 +781,9 @@ def list_pending_together_goals(user) -> list[dict]:
                 "category_emoji": (goal.category.emoji or "").strip(),
                 "category_icon": goal.category.icon or "",
                 "target_label": _target_label(goal),
+                "current_target_label": "",
                 "period": goal.period,
+                "kind": "new",
                 "proposed_by_username": proposer.username if proposer else "",
                 "partner_username": partner_name,
                 "status": "needs_you" if not goal.accepted else "waiting_on_partner",

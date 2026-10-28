@@ -686,7 +686,9 @@ export function SetGoalSheet({
                   </View>
                   <Text style={styles.modeHint}>
                     {scope === "shared"
-                      ? "Counts both of you after your partner approves"
+                      ? existingGoal?.scope === "shared"
+                        ? "A change needs both of you. The current goal stays until then, and the new one counts from that day forward."
+                        : "Counts both of you after your partner approves"
                       : "Only your entries count"}
                   </Text>
                 </>
