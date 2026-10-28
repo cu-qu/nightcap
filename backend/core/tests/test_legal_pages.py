@@ -17,6 +17,9 @@ class LegalPagesTests(TestCase):
         self.assertContains(resp, "Photos")
         self.assertContains(resp, "Subscriptions")
         self.assertContains(resp, "Delete account")
+        self.assertContains(resp, "Cloudflare R2")
+        self.assertContains(resp, "shared recap")
+        self.assertNotContains(resp, "Favorite photos stay private")
 
     def test_terms_include_auto_renew_language(self):
         resp = self.client.get("/terms/")

@@ -266,7 +266,7 @@ export default function SettingsScreen() {
               : user?.membership?.status === "complimentary"
                 ? "Complimentary"
                 : user?.membership?.status === "trial"
-                  ? "Free month"
+                  ? "30 days"
                   : "Subscribe"}
           </Text>
           <Text style={styles.partnerSub}>{membershipSummary(user)}</Text>

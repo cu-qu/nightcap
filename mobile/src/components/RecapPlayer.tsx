@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { nightCapPhotoUrl, resolveNightCapPhotoUri } from "@/src/api/nightcaps";
 import { AuthenticatedImage } from "@/src/components/AuthenticatedImage";
 import { PrimaryButton } from "@/src/components/PrimaryButton";
+import { useAuthStore } from "@/src/store/authStore";
 import { colors } from "@/src/theme/colors";
 import type {
   RecapCategoryRollup,
@@ -26,6 +28,45 @@ type Props = {
   slides: RecapSlide[];
   onClose: () => void;
 };
+
+const SUPPORT_EMAIL = "night_cap_app@proton.me";
+
+function isPartnerMoment(
+  moment: RecapMoment | undefined,
+  viewerId: string | number | undefined
+): boolean {
+  if (!moment?.author_id || viewerId == null) return false;
+  return String(moment.author_id) !== String(viewerId);
+}
+
+function reportMoment(moment: RecapMoment, username: string) {
+  const body = [
+    `NightCap username: ${username || "unknown"}`,
+    moment.author ? `Moment from: ${moment.author}` : null,
+    moment.date ? `Date: ${moment.date}` : null,
+    moment.nightcap_uuid ? `Moment id: ${moment.nightcap_uuid}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Report a NightCap moment")}&body=${encodeURIComponent(body)}`;
+  void Linking.openURL(href);
+}
+
+function ReportMoment({ moment }: { moment: RecapMoment }) {
+  const user = useAuthStore((s) => s.user);
+  if (!isPartnerMoment(moment, user?.id)) return null;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Report moment"
+      hitSlop={8}
+      onPress={() => reportMoment(moment, user?.username || "")}
+      style={styles.report}
+    >
+      <Text style={styles.reportLabel}>Report</Text>
+    </Pressable>
+  );
+}
 
 function formatCategoryValue(category: RecapCategoryRollup): string {
   const amount = Number(category.amount);
@@ -114,6 +155,7 @@ function MomentFrame({ slide }: { slide: RecapSlide }) {
         {date ? formatDisplayDate(date) : slide.body}
       </Text>
       {text ? <Text style={styles.momentText}>“{text}”</Text> : null}
+      {moment ? <ReportMoment moment={moment} /> : null}
     </View>
   );
 }
@@ -151,6 +193,7 @@ function MomentsList({ moments }: { moments: RecapMoment[] }) {
             ) : (
               <Text style={styles.momentText}>A still from the day.</Text>
             )}
+            <ReportMoment moment={moment} />
           </View>
         </View>
       ))}
@@ -484,6 +527,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 26,
     color: colors.text,
+  },
+  report: {
+    alignSelf: "flex-start",
+    marginTop: 12,
+    zIndex: 3,
+  },
+  reportLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.danger,
   },
   moodRow: {
     marginTop: 28,

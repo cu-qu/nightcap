@@ -12,6 +12,7 @@ import {
 } from "react-native";
 
 import { ApiError } from "@/src/api/client";
+import { LegalLinks } from "@/src/components/LegalLinks";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { useAuthStore } from "@/src/store/authStore";
 import { useCategoriesStore } from "@/src/store/categoriesStore";
@@ -106,6 +107,7 @@ export default function LoginScreen() {
               <Text style={styles.footerLink}>Create account</Text>
             </Pressable>
           </View>
+          <LegalLinks />
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>

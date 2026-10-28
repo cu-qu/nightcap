@@ -3,7 +3,7 @@ import uuid
 from django.db import transaction
 from django.utils import timezone
 
-from accounts.models import Membership, PartnershipInvite, User
+from accounts.models import DevicePushToken, Membership, PartnerNudge, PartnershipInvite, User
 from accounts.partnerships import get_user_partnership, leave_partnership
 from categories.models import CategoryGroup, TrackingCategory
 from entries.models import DayReflection, Entry, NightCap
@@ -46,6 +46,10 @@ def delete_user_account(user: User) -> None:
         CategoryGroup.objects.filter(user=user).delete()
         Membership.objects.filter(user=user).delete()
         PartnershipInvite.objects.filter(invited_by=user).delete()
+        PartnershipInvite.objects.filter(email__iexact=user.email).delete()
+        DevicePushToken.objects.filter(user=user).delete()
+        PartnerNudge.objects.filter(from_user=user).delete()
+        PartnerNudge.objects.filter(to_user=user).delete()
 
         email, username = _unique_tombstone()
         user.email = email

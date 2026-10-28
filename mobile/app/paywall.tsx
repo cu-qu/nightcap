@@ -2,6 +2,7 @@ import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,7 +13,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import {
-  FALLBACK_PRICES,
   LEGAL_URLS,
   MONTHLY_PRODUCT_ID,
   YEARLY_PRODUCT_ID,
@@ -48,9 +48,14 @@ export default function PaywallScreen() {
     return <Redirect href="/verify-email" />;
   }
 
-  const monthlyPrice = iap.prices[MONTHLY_PRODUCT_ID]?.displayPrice || FALLBACK_PRICES[MONTHLY_PRODUCT_ID];
-  const yearlyPrice = iap.prices[YEARLY_PRODUCT_ID]?.displayPrice || FALLBACK_PRICES[YEARLY_PRODUCT_ID];
+  const monthlyPrice = iap.prices[MONTHLY_PRODUCT_ID]?.displayPrice || "";
+  const yearlyPrice = iap.prices[YEARLY_PRODUCT_ID]?.displayPrice || "";
   const entitled = user?.membership?.is_active === true;
+  const storeName = Platform.OS === "android" ? "Play Store" : "App Store";
+  const renewalCopy =
+    Platform.OS === "android"
+      ? "Payment is charged to your Google Play account at confirmation of purchase. The subscription renews automatically unless you turn off auto-renew at least 24 hours before the period ends. Your account is charged for renewal within 24 hours before the period ends. Manage or cancel in Play Store → Payments & subscriptions. Subscribing ends any remaining free days."
+      : "Payment is charged to your Apple ID at confirmation of purchase. The subscription renews automatically unless you turn off auto-renew at least 24 hours before the period ends. Your account is charged for renewal within 24 hours before the period ends. Manage or cancel in Settings → Apple ID → Subscriptions. Subscribing ends any remaining free days.";
 
   async function onSubscribe(productId: string) {
     setMessage(null);
@@ -68,35 +73,47 @@ export default function PaywallScreen() {
         <Text style={styles.eyebrow}>NightCap for two</Text>
         <Text style={styles.title}>One membership. Both of you.</Text>
         <Text style={styles.body}>
-          Shared goals, recaps, and nightly check-ins for a couple. First month
-          free, then {monthlyPrice} a month or {yearlyPrice} a year.
+          Shared goals, recaps, and nightly check-ins for a couple. A new
+          account includes 30 days. Subscribing charges today and ends any days
+          still left.
         </Text>
         <Text style={styles.summary}>{membershipSummary(user)}</Text>
 
-        <Pressable
-          onPress={() => void onSubscribe(YEARLY_PRODUCT_ID)}
-          disabled={iap.busy || entitled}
-          style={({ pressed }) => [
-            styles.plan,
-            styles.planFeatured,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={styles.planEyebrow}>Best value</Text>
-          <Text style={styles.planName}>Yearly</Text>
-          <Text style={styles.planPrice}>{yearlyPrice} / year</Text>
-          <Text style={styles.planSub}>One subscription covers both of you.</Text>
-        </Pressable>
+        {yearlyPrice ? (
+          <Pressable
+            onPress={() => void onSubscribe(YEARLY_PRODUCT_ID)}
+            disabled={iap.busy || entitled}
+            style={({ pressed }) => [
+              styles.plan,
+              styles.planFeatured,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={styles.planEyebrow}>Best value</Text>
+            <Text style={styles.planName}>Yearly</Text>
+            <Text style={styles.planPrice}>{yearlyPrice} / year</Text>
+            <Text style={styles.planSub}>One subscription covers both of you.</Text>
+          </Pressable>
+        ) : null}
 
-        <Pressable
-          onPress={() => void onSubscribe(MONTHLY_PRODUCT_ID)}
-          disabled={iap.busy || entitled}
-          style={({ pressed }) => [styles.plan, pressed && styles.pressed]}
-        >
-          <Text style={styles.planName}>Monthly</Text>
-          <Text style={styles.planPrice}>{monthlyPrice} / month</Text>
-          <Text style={styles.planSub}>Cancel anytime in your store account.</Text>
-        </Pressable>
+        {monthlyPrice ? (
+          <Pressable
+            onPress={() => void onSubscribe(MONTHLY_PRODUCT_ID)}
+            disabled={iap.busy || entitled}
+            style={({ pressed }) => [styles.plan, pressed && styles.pressed]}
+          >
+            <Text style={styles.planName}>Monthly</Text>
+            <Text style={styles.planPrice}>{monthlyPrice} / month</Text>
+            <Text style={styles.planSub}>Cancel anytime in your store account.</Text>
+          </Pressable>
+        ) : null}
+
+        {!monthlyPrice && !yearlyPrice ? (
+          <Text style={styles.planSub}>
+            Prices appear when the {storeName} responds. You can still restore a
+            purchase you already made.
+          </Text>
+        ) : null}
 
         {message ? <Text style={styles.message}>{message}</Text> : null}
 
@@ -132,11 +149,7 @@ export default function PaywallScreen() {
           />
         ) : null}
 
-        <Text style={styles.legal}>
-          Payment is charged to your Apple or Google account. Subscriptions renew
-          automatically unless you turn off auto-renew at least 24 hours before
-          the period ends. Unused trial time is forfeited when you buy.
-        </Text>
+        <Text style={styles.legal}>{renewalCopy}</Text>
         <View style={styles.links}>
           <Pressable onPress={() => void Linking.openURL(LEGAL_URLS.terms)}>
             <Text style={styles.link}>Terms</Text>

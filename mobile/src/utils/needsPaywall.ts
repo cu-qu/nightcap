@@ -23,10 +23,10 @@ export function membershipSummary(user: User | null | undefined): string {
   }
   if (membership.status === "trial") {
     const days = trialDaysLeft(membership.trial_ends_at);
-    if (days == null) return "First month is free.";
-    if (days <= 0) return "Your free month has ended.";
-    if (days === 1) return "1 day left in your free month.";
-    return `${days} days left in your free month.`;
+    if (days == null) return "30 days of NightCap are included.";
+    if (days <= 0) return "Your 30 days have ended.";
+    if (days === 1) return "1 day left of your 30 days.";
+    return `${days} days left of your 30 days.`;
   }
   if (membership.status === "active") {
     const plan = membership.plan === "yearly" ? "Yearly" : "Monthly";

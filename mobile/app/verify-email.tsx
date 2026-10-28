@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { resendVerificationEmail } from "@/src/api/auth";
 import { ApiError } from "@/src/api/client";
+import { LegalLinks } from "@/src/components/LegalLinks";
 import { PrimaryButton, Screen } from "@/src/components/PrimaryButton";
 import { useAuthStore } from "@/src/store/authStore";
 import { colors } from "@/src/theme/colors";
@@ -117,6 +118,7 @@ export default function VerifyEmailScreen() {
             <Text style={styles.footerDanger}>Delete account</Text>
           </Pressable>
         </View>
+        <LegalLinks />
       </ScrollView>
     </Screen>
   );

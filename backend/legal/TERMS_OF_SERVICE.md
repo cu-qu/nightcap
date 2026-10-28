@@ -1,6 +1,6 @@
 # Terms of Service
 
-**Effective Date:** October 22, 2026
+**Effective Date:** October 27, 2026
 
 These terms govern the NightCap apps and API. By creating an account or using NightCap, you agree to them. If you do not agree, do not use the service.
 
@@ -10,7 +10,7 @@ Questions: [night_cap_app@proton.me](mailto:night_cap_app@proton.me)
 
 NightCap helps you log spend, habits, workouts, notes, and an optional photo of the day, alone or with one partner. You keep ownership of the data you enter. You are responsible for keeping your password private and for content you upload (including photos).
 
-Use NightCap lawfully. Do not upload illegal content, harass anyone, or attempt to break into another account. Favorite photos are private to you; do not upload images you do not have the right to store.
+Use NightCap lawfully. Do not upload illegal content, harass anyone, or attempt to break into another account. A linked partner can see your favorite photos and moment notes in a shared recap. Do not upload images you do not have the right to store. From a shared recap you can report a partner’s moment to night_cap_app@proton.me.
 
 ## Subscriptions (NightCap for two)
 
@@ -31,7 +31,7 @@ If a purchase fails to unlock NightCap, use **Restore purchases** on the paywall
 
 ## Accounts
 
-You must provide a valid email. We may suspend accounts that violate these terms. You can delete your account in the app (Settings → Delete account). Deletion removes your NightCap data as described in the Privacy Policy.
+You must provide a valid email. We may suspend accounts that violate these terms. You can delete your account in the app (Settings → Delete account). Deletion removes your NightCap data as described in the Privacy Policy. Deleting your account does not cancel an Apple or Google subscription. Cancel that in your store account settings, or billing continues.
 
 ## Disclaimer
 

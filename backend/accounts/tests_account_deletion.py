@@ -8,7 +8,7 @@ from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APIClient
 
-from accounts.models import Membership, PartnershipMember, User
+from accounts.models import DevicePushToken, Membership, PartnershipMember, User
 from accounts.partnerships import accept_invite_code, ensure_partnership
 from categories.defaults import create_default_categories_for_user
 from categories.models import CategoryGroup, TrackingCategory
@@ -91,6 +91,19 @@ class DeleteAccountTests(TestCase):
         self.assertFalse(CategoryGroup.objects.filter(user_id=self.user.id).exists())
         self.assertFalse(Membership.objects.filter(user_id=self.user.id).exists())
         self.assertFalse(nightcap.favorite_photo.storage.exists(photo_name))
+
+    def test_delete_account_removes_push_tokens(self):
+        token = "ab" * 32
+        DevicePushToken.objects.create(
+            user=self.user,
+            token=token,
+            platform=DevicePushToken.PLATFORM_IOS,
+            environment=DevicePushToken.ENV_SANDBOX,
+        )
+
+        resp = self.client.delete("/api/v1/auth/account/")
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(DevicePushToken.objects.filter(token=token).exists())
 
     def test_delete_account_leaves_partnership(self):
         partnership = ensure_partnership(self.user)

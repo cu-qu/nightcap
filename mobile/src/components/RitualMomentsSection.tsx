@@ -57,18 +57,15 @@ export function RitualMomentsSection({
 
   async function launch(source: "library" | "camera") {
     try {
-      const permission =
-        source === "camera"
-          ? await ImagePicker.requestCameraPermissionsAsync()
-          : await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert(
-          "Permission needed",
-          source === "camera"
-            ? "Allow camera access to capture today’s photo."
-            : "Allow photo access to save a favorite still."
-        );
-        return;
+      if (source === "camera") {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert(
+            "Permission needed",
+            "Allow camera access to capture today’s photo."
+          );
+          return;
+        }
       }
 
       const result =

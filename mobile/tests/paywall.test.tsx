@@ -2,16 +2,24 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 import { Alert } from "react-native";
 import { router } from "expo-router";
 
+import { MONTHLY_PRODUCT_ID, YEARLY_PRODUCT_ID } from "@/src/iap/products";
 import { useAuthStore } from "@/src/store/authStore";
 import { makeUser } from "./fixtures";
 import PaywallScreen from "@/app/paywall";
+
+const mockIap = {
+  prices: {
+    [MONTHLY_PRODUCT_ID]: { id: MONTHLY_PRODUCT_ID, displayPrice: "$3" },
+    [YEARLY_PRODUCT_ID]: { id: YEARLY_PRODUCT_ID, displayPrice: "$15" },
+  } as Record<string, { id: string; displayPrice: string }>,
+};
 
 jest.mock("@/src/iap/useCoupleIap", () => ({
   useCoupleIap: () => ({
     ready: true,
     supported: true,
     busy: false,
-    prices: {},
+    prices: mockIap.prices,
     subscribe: jest.fn(),
     restore: jest.fn(async () => false),
     redeemCode: jest.fn(),
@@ -21,6 +29,10 @@ jest.mock("@/src/iap/useCoupleIap", () => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockIap.prices = {
+    [MONTHLY_PRODUCT_ID]: { id: MONTHLY_PRODUCT_ID, displayPrice: "$3" },
+    [YEARLY_PRODUCT_ID]: { id: YEARLY_PRODUCT_ID, displayPrice: "$15" },
+  };
   useAuthStore.setState({
     user: makeUser(),
     isAuthenticated: true,
@@ -35,7 +47,9 @@ describe("paywall", () => {
     expect(screen.getByText("NightCap for two")).toBeOnTheScreen();
     expect(screen.getByText("$3 / month")).toBeOnTheScreen();
     expect(screen.getByText("$15 / year")).toBeOnTheScreen();
-    expect(screen.getByText(/days left in your free month/)).toBeOnTheScreen();
+    expect(screen.getByText(/days left of your 30 days/)).toBeOnTheScreen();
+    expect(screen.getByText(/charged to your Apple ID/)).toBeOnTheScreen();
+    expect(screen.queryByText(/Google/)).toBeNull();
     expect(screen.getByRole("button", { name: "Restore purchases" })).toBeOnTheScreen();
     expect(screen.getByText("Delete account")).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Continue" })).toBeOnTheScreen();
@@ -53,7 +67,7 @@ describe("paywall", () => {
     await fireEvent.press(screen.getByText("Delete account"));
     expect(alert).toHaveBeenCalledWith(
       "Delete account?",
-      expect.stringContaining("journal"),
+      expect.stringContaining("does not cancel"),
       expect.any(Array)
     );
   });
@@ -79,5 +93,14 @@ describe("paywall", () => {
     expect(screen.getByText("Subscribe to keep NightCap for two.")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
     expect(screen.getByText("Delete account")).toBeOnTheScreen();
+  });
+
+  it("hides plan prices until the store returns them", async () => {
+    mockIap.prices = {};
+    await render(<PaywallScreen />);
+
+    expect(screen.queryByText("$3 / month")).toBeNull();
+    expect(screen.queryByText("$15 / year")).toBeNull();
+    expect(screen.getByText(/Prices appear when the App Store responds/)).toBeOnTheScreen();
   });
 });

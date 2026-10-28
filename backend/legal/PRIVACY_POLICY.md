@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective Date:** September 12, 2026
+**Effective Date:** October 27, 2026
 
 NightCap (“we”, “us”) is a private end-of-day journal for one person or a couple. This policy describes the information the NightCap apps and API collect, how we use it, and how you can delete it.
 
@@ -12,9 +12,9 @@ Contact: [night_cap_app@proton.me](mailto:night_cap_app@proton.me)
 
 **Journal and tracking.** Categories you create, daily spend and habit entries, amounts, quantities, notes, moods, favorite moments, and goal targets. Workout and fitness numbers are values you type in. We do not connect to Apple Health or HealthKit.
 
-**Photos.** If you add a favorite photo of the day, we store that image on our servers so it can sync and appear in recaps. We access the camera or photo library only when you choose to add a photo.
+**Photos.** If you add a favorite photo of the day, we store that image on Cloudflare R2 so it can sync and appear in recaps. We access the camera only when you choose to take a photo. Choosing an existing photo uses the system picker and does not grant NightCap your photo library. A linked partner can see that photo in a shared recap. Someone who is not linked cannot.
 
-**Partner sharing.** If you join a couple space, we store the invite code and the other person’s username and email so you can link accounts. Shared goals and together check-ins include both people’s matching category values. Favorite photos stay private to the person who uploaded them. Linked partners can send each other a NightCap nudge for a day that is not logged yet.
+**Partner sharing.** If you join a couple space, we store the invite code and the other person’s username and email so you can link accounts. Shared goals and together check-ins include both people’s matching category values. Shared recaps include each person’s favorite-moment text and photos. Personal goals stay visible only to you. Linked partners can send each other a NightCap nudge for a day that is not logged yet.
 
 **Notifications.** If you turn on the nightly reminder, the app schedules a local notification on your device. Partner nudges are sent as an iPhone push notification when an Apple device token is available, or as transactional email if push cannot be delivered. We do not send marketing push campaigns.
 
@@ -30,7 +30,7 @@ We use this information to provide NightCap: sign-in, sync, couple goals, recaps
 
 We share data only with:
 
-- **You and, if you choose, your linked partner** for together goals and check-in values.
+- **You and, if you choose, your linked partner** for together goals, check-in values, and the favorite-moment text and photos in a shared recap.
 - **Apple and Google** for in-app purchases (they are the merchant of record).
 - **Infrastructure providers** that host the API, database, file storage, and transactional email, under contracts that limit use to providing the service.
 
