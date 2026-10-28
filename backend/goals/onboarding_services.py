@@ -299,6 +299,19 @@ def _upsert_goal_for_category(
     return goal, created
 
 
+def _notify_if_new_proposal(goal: Goal, *, recipient, created: bool, already_pending: bool) -> None:
+    if goal.scope != Goal.SCOPE_SHARED or goal.accepted:
+        return
+    if already_pending and not created:
+        return
+    proposer = goal.proposed_by
+    if proposer is None or proposer.pk == recipient.pk:
+        return
+    from accounts.nudges import notify_shared_goal_proposal
+
+    notify_shared_goal_proposal(proposer=proposer, recipient=recipient, goal=goal)
+
+
 def mirror_shared_goal(source_goal: Goal) -> None:
     if source_goal.scope != Goal.SCOPE_SHARED or not source_goal.partnership_id:
         return
@@ -307,7 +320,13 @@ def mirror_shared_goal(source_goal: Goal) -> None:
     )
     for member in members:
         category = ensure_category_like(member.user, source_goal.category)
-        _upsert_goal_for_category(
+        before = Goal.objects.filter(
+            user=member.user, category=category, is_active=True
+        ).only("scope", "accepted").first()
+        already_pending = bool(
+            before and before.scope == Goal.SCOPE_SHARED and not before.accepted
+        )
+        goal, created = _upsert_goal_for_category(
             user=member.user,
             category=category,
             name=source_goal.name,
@@ -320,6 +339,12 @@ def mirror_shared_goal(source_goal: Goal) -> None:
             template_slug=source_goal.template_slug,
             accepted=False,
             proposed_by=source_goal.proposed_by or source_goal.user,
+        )
+        _notify_if_new_proposal(
+            goal,
+            recipient=member.user,
+            created=created,
+            already_pending=already_pending,
         )
 
 
@@ -343,7 +368,13 @@ def copy_shared_goals_to_user(partnership, user) -> int:
             continue
         seen.add(key)
         category = ensure_category_like(user, goal.category)
-        _, created = _upsert_goal_for_category(
+        before = Goal.objects.filter(user=user, category=category, is_active=True).only(
+            "scope", "accepted"
+        ).first()
+        already_pending = bool(
+            before and before.scope == Goal.SCOPE_SHARED and not before.accepted
+        )
+        copied_goal, created = _upsert_goal_for_category(
             user=user,
             category=category,
             name=goal.name,
@@ -356,6 +387,12 @@ def copy_shared_goals_to_user(partnership, user) -> int:
             template_slug=goal.template_slug,
             accepted=False,
             proposed_by=goal.proposed_by or goal.user,
+        )
+        _notify_if_new_proposal(
+            copied_goal,
+            recipient=user,
+            created=created,
+            already_pending=already_pending,
         )
         if created:
             copied += 1

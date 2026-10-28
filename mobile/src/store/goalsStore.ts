@@ -41,13 +41,10 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     const next = period ?? get().period;
     set({ loading: true, error: null, period: next });
     try {
-      const summary = await goalsApi.getGroupSummary(next);
-      let pending = get().pending;
-      try {
-        pending = await goalsApi.getPendingGoals();
-      } catch {
-        // Keep the last list if the approval queue cannot be loaded.
-      }
+      const [summary, pending] = await Promise.all([
+        goalsApi.getGroupSummary(next),
+        goalsApi.getPendingGoals().catch(() => get().pending),
+      ]);
       set({ summary, pending, lastFetched: Date.now(), loading: false });
     } catch (e) {
       set({
@@ -71,13 +68,25 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
   },
 
   acceptPending: async (id) => {
-    await goalsApi.acceptGoal(id);
-    await get().refresh();
+    try {
+      await goalsApi.acceptGoal(id);
+      await get().refresh();
+    } catch (e) {
+      set({
+        error: e instanceof Error ? e.message : "Could not approve that goal",
+      });
+    }
   },
 
   declinePending: async (id) => {
-    await goalsApi.declineGoal(id);
-    await get().refresh();
+    try {
+      await goalsApi.declineGoal(id);
+      await get().refresh();
+    } catch (e) {
+      set({
+        error: e instanceof Error ? e.message : "Could not update that goal",
+      });
+    }
   },
 
   deactivateGoal: async (id) => {

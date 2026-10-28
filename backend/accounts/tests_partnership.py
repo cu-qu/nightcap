@@ -6,7 +6,13 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from accounts.models import Partnership, PartnershipMember, User, UserProfile
+from accounts.models import (
+    DevicePushToken,
+    Partnership,
+    PartnershipMember,
+    User,
+    UserProfile,
+)
 from accounts.partnerships import accept_invite_code, ensure_partnership
 from categories.defaults import create_default_categories_for_user
 from categories.models import TrackingCategory
@@ -863,3 +869,69 @@ class SharedGoalProgressTests(TestCase):
         owner = Goal.objects.get(user=self.a, category=cat_a, is_active=True)
         self.assertEqual(owner.scope, Goal.SCOPE_PERSONAL)
         self.assertEqual(owner.target_value, Decimal("200.00"))
+
+    @patch("accounts.nudges._send_apns", return_value=True)
+    @patch("accounts.emails.SharedGoalProposalEmail.send")
+    def test_new_shared_goal_notifies_partner(self, mock_email, mock_push):
+        self.client.post(
+            "/api/v1/onboarding/setup/",
+            {"mode": "couple", "templates": []},
+            format="json",
+        )
+        partnership = self.a.partnership_membership.partnership
+        partner_client = APIClient()
+        partner_client.force_authenticate(user=self.b)
+        partner_client.post(
+            "/api/v1/partnership/join/",
+            {"invite_code": partnership.invite_code},
+            format="json",
+        )
+        DevicePushToken.objects.create(
+            user=self.b,
+            token="cd" * 32,
+            platform="ios",
+            environment="sandbox",
+        )
+        cat_a = TrackingCategory.objects.get(user=self.a, name="Groceries")
+        with self.captureOnCommitCallbacks(execute=True):
+            proposed = self.client.post(
+                "/api/v1/goals/set/",
+                {
+                    "category_uuid": str(cat_a.uuid),
+                    "target_value": "90.00",
+                    "period": "monthly",
+                    "scope": "shared",
+                },
+                format="json",
+            )
+        self.assertEqual(proposed.status_code, 201, proposed.content)
+        mock_push.assert_called_once()
+        body = mock_push.call_args.kwargs["body"]
+        self.assertEqual(
+            body, "Your partner wants to create a new shared goal: Groceries"
+        )
+        self.assertEqual(
+            mock_push.call_args.kwargs["data"]["type"], "shared_goal_proposal"
+        )
+        self.assertEqual(mock_push.call_args.kwargs["data"]["url"], "/(tabs)/goals")
+        mock_email.assert_not_called()
+
+        mock_push.reset_mock()
+        with self.captureOnCommitCallbacks(execute=True):
+            again = self.client.post(
+                "/api/v1/goals/set/",
+                {
+                    "category_uuid": str(cat_a.uuid),
+                    "target_value": "90.00",
+                    "period": "monthly",
+                    "scope": "shared",
+                },
+                format="json",
+            )
+        self.assertEqual(again.status_code, 200, again.content)
+        mock_push.assert_not_called()
+
+        mock_push.reset_mock()
+        with self.captureOnCommitCallbacks(execute=True):
+            partner_client.get("/api/v1/goals/pending/")
+        mock_push.assert_not_called()

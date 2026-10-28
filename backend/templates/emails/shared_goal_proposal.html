@@ -1,0 +1,7 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Your partner wants to create a new shared goal{% endblock %}
+{% block preheader %}{{ from_username }} wants to create a new shared goal: {{ goal_name }}{% endblock %}
+{% block headline %}Your partner wants to create a new shared goal{% endblock %}
+{% block content %}{{ from_username }} wants to create a new shared goal: {{ goal_name }}. Open NightCap and approve it if you want it to count for both of you.{% endblock %}
+{% block note %}It stays pending until you approve it.{% endblock %}

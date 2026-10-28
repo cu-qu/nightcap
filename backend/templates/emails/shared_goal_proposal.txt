@@ -1,0 +1,5 @@
+{{ from_username }} wants to create a new shared goal: {{ goal_name }}.
+
+Open NightCap and approve it if you want it to count for both of you.
+
+The NightCap team

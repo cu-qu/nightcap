@@ -142,3 +142,25 @@ class PartnerNudgeEmail:
             tags=["partner-nudge"],
         )
 
+
+@dataclass
+class SharedGoalProposalEmail:
+    """Ask a linked partner to approve a Together goal."""
+
+    to_email: str
+    from_username: str
+    goal_name: str
+
+    def send(self) -> None:
+        send_transactional_mail(
+            subject="Your partner wants to create a new shared goal",
+            text_template="emails/shared_goal_proposal.txt",
+            html_template="emails/shared_goal_proposal.html",
+            context={
+                "from_username": self.from_username,
+                "goal_name": self.goal_name,
+            },
+            to_email=self.to_email,
+            tags=["shared-goal-proposal"],
+        )
+

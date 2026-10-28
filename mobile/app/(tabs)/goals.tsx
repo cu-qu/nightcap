@@ -253,17 +253,35 @@ function PendingTogetherCard({
       </View>
       <View style={styles.pendingActions}>
         {waiting ? (
-          <Pressable onPress={onDecline} disabled={busy} hitSlop={8}>
+          <Pressable
+            onPress={onDecline}
+            disabled={busy}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Cancel together request for ${goal.display_name}`}
+          >
             <Text style={styles.removeText}>
               {busy ? "Canceling…" : "Cancel request"}
             </Text>
           </Pressable>
         ) : (
           <>
-            <Pressable onPress={onApprove} disabled={busy} hitSlop={8}>
+            <Pressable
+              onPress={onApprove}
+              disabled={busy}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`Approve ${goal.display_name}`}
+            >
               <Text style={styles.editText}>{busy ? "Saving…" : "Approve"}</Text>
             </Pressable>
-            <Pressable onPress={onDecline} disabled={busy} hitSlop={8}>
+            <Pressable
+              onPress={onDecline}
+              disabled={busy}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`Skip ${goal.display_name}`}
+            >
               <Text style={styles.removeText}>{busy ? "Saving…" : "Not now"}</Text>
             </Pressable>
           </>

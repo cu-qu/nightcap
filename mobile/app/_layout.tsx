@@ -50,7 +50,13 @@ function useReminderObserver() {
       const data = notification.request.content.data ?? {};
       const url = data.url;
       const isNudge = data.type === "partner_nudge";
-      if (typeof url !== "string" || (url !== REMINDER_PATH && !isNudge)) return;
+      const isSharedGoal = data.type === "shared_goal_proposal";
+      if (
+        typeof url !== "string" ||
+        (url !== REMINDER_PATH && !isNudge && !isSharedGoal)
+      ) {
+        return;
+      }
       Notifications.clearLastNotificationResponse();
 
       const { isAuthenticated, user } = useAuthStore.getState();
@@ -68,6 +74,10 @@ function useReminderObserver() {
       }
       if (needsPaywall(user)) {
         router.push("/paywall");
+        return;
+      }
+      if (isSharedGoal) {
+        router.push("/(tabs)/goals");
         return;
       }
       const date =

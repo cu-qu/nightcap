@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date
 
@@ -11,8 +12,11 @@ from accounts.emails import PartnerNudgeEmail
 from accounts.models import DevicePushToken, PartnerNudge
 from accounts.partnerships import get_partner_user, get_user_partnership
 
+logger = logging.getLogger(__name__)
+
 MAX_NUDGE_AGE_DAYS = 14
 NUDGE_PATH = "/ritual/spend"
+GOALS_PATH = "/(tabs)/goals"
 IOS_TOKEN_RE = re.compile(r"^[0-9a-fA-F]{64,200}$")
 
 
@@ -156,3 +160,43 @@ def send_partner_nudge(user, day: date) -> dict:
         delivered_via=",".join(channels),
     )
     return serialize_nudge(nudge, already_sent=False)
+
+
+def notify_shared_goal_proposal(*, proposer, recipient, goal) -> None:
+    """Tell someone their partner proposed a Together goal."""
+    if proposer is None or recipient is None or proposer.pk == recipient.pk:
+        return
+    goal_name = (getattr(goal, "display_name", "") or "a goal").strip()
+    title = "NightCap"
+    body = f"Your partner wants to create a new shared goal: {goal_name}"
+    data = {
+        "type": "shared_goal_proposal",
+        "url": GOALS_PATH,
+        "goal_uuid": str(goal.uuid),
+    }
+
+    def deliver() -> None:
+        records = list(
+            DevicePushToken.objects.filter(
+                user=recipient, platform=DevicePushToken.PLATFORM_IOS
+            )
+        )
+        pushed = bool(
+            records and _send_apns(records, title=title, body=body, data=data)
+        )
+        if pushed:
+            return
+        try:
+            from accounts.emails import SharedGoalProposalEmail
+
+            SharedGoalProposalEmail(
+                to_email=recipient.email,
+                from_username=proposer.username,
+                goal_name=goal_name,
+            ).send()
+        except Exception:
+            logger.exception("Could not email a shared goal proposal.")
+
+    from django.db import transaction
+
+    transaction.on_commit(deliver)
