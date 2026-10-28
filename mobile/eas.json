@@ -12,6 +12,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "ios": {
+        "image": "latest"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://nightcap-api-production-ce8f.up.railway.app"
       }

@@ -302,7 +302,7 @@ export default function SettingsScreen() {
               </Text>
               {remindersSupported() && !notifyAllowed ? (
                 <PrimaryButton
-                  title="Allow iPhone notifications"
+                  title="Turn on notifications"
                   variant="secondary"
                   loading={notifyBusy}
                   onPress={() => {
