@@ -73,13 +73,24 @@
             "usesCleartextTraffic": true
           },
           "ios": {
-            "deploymentTarget": "15.1"
+            "deploymentTarget": "16.4"
           }
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "3d5ec2be-bb84-4c33-8018-49be2615f69d"
+      }
+    },
+    "owner": "deanquint"
   }
 }
