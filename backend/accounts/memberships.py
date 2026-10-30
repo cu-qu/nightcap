@@ -155,6 +155,77 @@ def is_entitled(user: User) -> bool:
     return membership_is_active(membership, user=user)
 
 
+_STORE_FIELDS = (
+    "plan",
+    "store",
+    "product_id",
+    "original_transaction_id",
+    "latest_transaction_id",
+    "purchase_token",
+    "auto_renewing",
+    "store_expires_at",
+    "purchased_by",
+)
+
+
+def _snapshot_store(membership: Membership) -> dict | None:
+    if not membership.original_transaction_id:
+        return None
+    return {field: getattr(membership, field) for field in _STORE_FIELDS}
+
+
+def _clear_store(membership: Membership) -> None:
+    membership.plan = ""
+    membership.store = ""
+    membership.product_id = ""
+    membership.original_transaction_id = ""
+    membership.latest_transaction_id = ""
+    membership.purchase_token = ""
+    membership.auto_renewing = False
+    membership.store_expires_at = None
+    membership.purchased_by = None
+
+
+def _apply_store(membership: Membership, snapshot: dict) -> None:
+    for field, value in snapshot.items():
+        setattr(membership, field, value)
+
+
+def _release_store(membership: Membership) -> None:
+    """Clear a receipt and save it before another row takes that transaction id."""
+    _clear_store(membership)
+    membership.save(update_fields=[*_STORE_FIELDS, "updated_at"])
+
+
+def _assign_personal_trial(membership: Membership, user: User) -> None:
+    trial = start_trial_fields(user.date_joined)
+    membership.trial_started_at = trial["trial_started_at"]
+    membership.trial_ends_at = trial["trial_ends_at"]
+
+
+def _clear_complimentary(membership: Membership) -> None:
+    membership.complimentary = False
+    membership.complimentary_until = None
+    membership.granted_by = None
+    membership.granted_at = None
+    membership.grant_note = ""
+
+
+def _take_complimentary(membership: Membership, user: User) -> dict | None:
+    """Pull a comp grant off a shared membership when the person who granted it leaves."""
+    if not membership.complimentary or membership.granted_by_id != user.id:
+        return None
+    snapshot = {
+        "complimentary": True,
+        "complimentary_until": membership.complimentary_until,
+        "granted_by": membership.granted_by,
+        "granted_at": membership.granted_at,
+        "grant_note": membership.grant_note,
+    }
+    _clear_complimentary(membership)
+    return snapshot
+
+
 def attach_membership_to_partnership(user: User, partnership: Partnership) -> Membership:
     """Move the caller's membership onto the couple space, merging with any existing one."""
     with transaction.atomic():
@@ -169,100 +240,103 @@ def attach_membership_to_partnership(user: User, partnership: Partnership) -> Me
             return personal
         if personal is None:
             return couple
-        _merge_into(couple, personal)
-        personal.delete()
+        keep_personal = _merge_into(couple, personal)
+        if not keep_personal:
+            personal.delete()
         return couple
 
 
 def detach_membership_to_user(user: User) -> Membership:
-    """Give the user their own membership before they leave a couple space."""
+    """Give the user their own membership before they leave a couple space.
+
+    The store receipt stays with the person who paid. Everyone else goes back to
+    the trial that started when they signed up, not their partner's trial.
+    """
     from accounts.partnerships import get_user_partnership
 
-    partnership = get_user_partnership(user)
-    personal = Membership.objects.filter(user=user).first()
-    if partnership is None:
+    with transaction.atomic():
+        partnership = get_user_partnership(user)
+        personal = Membership.objects.select_for_update().filter(user=user).first()
+        if partnership is None:
+            return personal or create_trial_membership(user=user, joined_at=user.date_joined)
+
+        couple = Membership.objects.select_for_update().filter(partnership=partnership).first()
+        stayer = (
+            partnership.members.exclude(user=user).select_related("user").first()
+        )
+        if stayer is None:
+            return _detach_last_member(user, personal, couple)
+        return _detach_with_stayer(user, personal, couple, stayer.user)
+
+
+def _detach_last_member(user: User, personal: Membership | None, couple: Membership | None) -> Membership:
+    """The only person in the space keeps the receipt if it is theirs."""
+    if couple is None:
         return personal or create_trial_membership(user=user, joined_at=user.date_joined)
-
-    couple = Membership.objects.filter(partnership=partnership).first()
-    remaining = partnership.members.exclude(user=user).count()
-
-    if remaining == 0:
-        if couple is not None:
-            couple.partnership = None
-            couple.user = user
-            couple.save(update_fields=["user", "partnership", "updated_at"])
-            return couple
-        return personal or create_trial_membership(user=user, joined_at=user.date_joined)
-
+    if couple.purchased_by_id not in (None, user.id):
+        _release_store(couple)
     if personal is not None:
-        return personal
+        parked = _snapshot_store(personal)
+        if parked and parked["original_transaction_id"] != couple.original_transaction_id:
+            _release_store(personal)
+            if not couple.original_transaction_id:
+                _apply_store(couple, parked)
+        personal.delete()
+    couple.partnership = None
+    couple.user = user
+    couple.save(update_fields=["user", "partnership", "updated_at", *_STORE_FIELDS])
+    return couple
 
-    fields = start_trial_fields(user.date_joined)
+
+def _detach_with_stayer(
+    user: User,
+    personal: Membership | None,
+    couple: Membership | None,
+    stayer: User,
+) -> Membership:
+    if (
+        personal is not None
+        and not personal.original_transaction_id
+        and not (personal.complimentary and personal.granted_by_id == user.id)
+    ):
+        personal.delete()
+        personal = None
+
+    if couple is not None and couple.purchased_by_id == user.id:
+        leaver_store = _snapshot_store(couple)
+        _release_store(couple)
+        stayer_personal = Membership.objects.select_for_update().filter(user=stayer).first()
+        if stayer_personal is not None and stayer_personal.original_transaction_id:
+            stayer_store = _snapshot_store(stayer_personal)
+            _release_store(stayer_personal)
+            if stayer_store:
+                _apply_store(couple, stayer_store)
+            stayer_personal.delete()
+        comp = _take_complimentary(couple, user)
+        _assign_personal_trial(couple, stayer)
+        couple.save()
+        if personal is not None:
+            personal.delete()
+        fields = start_trial_fields(user.date_joined)
+        if leaver_store:
+            fields.update(leaver_store)
+        if comp:
+            fields.update(comp)
+        return Membership.objects.create(user=user, **fields)
+
+    if personal is None:
+        personal = Membership(user=user, **start_trial_fields(user.date_joined))
+    else:
+        _assign_personal_trial(personal, user)
     if couple is not None:
-        if couple.purchased_by_id == user.id:
-            fields.update(
-                {
-                    "plan": couple.plan,
-                    "store": couple.store,
-                    "product_id": couple.product_id,
-                    "original_transaction_id": couple.original_transaction_id,
-                    "latest_transaction_id": couple.latest_transaction_id,
-                    "purchase_token": couple.purchase_token,
-                    "auto_renewing": couple.auto_renewing,
-                    "store_expires_at": couple.store_expires_at,
-                    "purchased_by": couple.purchased_by,
-                    "trial_started_at": couple.trial_started_at,
-                    "trial_ends_at": couple.trial_ends_at,
-                }
-            )
-            couple.plan = ""
-            couple.store = ""
-            couple.product_id = ""
-            couple.original_transaction_id = ""
-            couple.latest_transaction_id = ""
-            couple.purchase_token = ""
-            couple.auto_renewing = False
-            couple.store_expires_at = None
-            couple.purchased_by = None
-            couple.save(
-                update_fields=[
-                    "plan",
-                    "store",
-                    "product_id",
-                    "original_transaction_id",
-                    "latest_transaction_id",
-                    "purchase_token",
-                    "auto_renewing",
-                    "store_expires_at",
-                    "purchased_by",
-                    "updated_at",
-                ]
-            )
-        else:
-            fields["trial_started_at"] = couple.trial_started_at
-            fields["trial_ends_at"] = couple.trial_ends_at
-            if couple.complimentary and couple.granted_by_id == user.id:
-                fields["complimentary"] = True
-                fields["complimentary_until"] = couple.complimentary_until
-                fields["granted_by"] = couple.granted_by
-                fields["granted_at"] = couple.granted_at
-                fields["grant_note"] = couple.grant_note
-                couple.complimentary = False
-                couple.complimentary_until = None
-                couple.granted_by = None
-                couple.granted_at = None
-                couple.grant_note = ""
-                couple.save(
-                    update_fields=[
-                        "complimentary",
-                        "complimentary_until",
-                        "granted_by",
-                        "granted_at",
-                        "grant_note",
-                        "updated_at",
-                    ]
-                )
-    return Membership.objects.create(user=user, **fields)
+        comp = _take_complimentary(couple, user)
+        if comp:
+            for field, value in comp.items():
+                setattr(personal, field, value)
+        _assign_personal_trial(couple, stayer)
+        couple.save()
+    personal.save()
+    return personal
 
 
 def _later(a, b):
@@ -273,7 +347,12 @@ def _later(a, b):
     return max(a, b)
 
 
-def _merge_into(target: Membership, incoming: Membership) -> None:
+def _merge_into(target: Membership, incoming: Membership) -> bool:
+    """Merge a joining membership into the couple row.
+
+    Returns True when the joiner's row must stay, because it still holds a
+    different store receipt than the one covering the couple.
+    """
     if incoming.complimentary:
         if not target.complimentary:
             target.complimentary = True
@@ -281,39 +360,74 @@ def _merge_into(target: Membership, incoming: Membership) -> None:
             target.granted_by = incoming.granted_by
             target.granted_at = incoming.granted_at
             target.grant_note = incoming.grant_note
-        else:
-            if target.complimentary_until is not None:
-                if incoming.complimentary_until is None:
-                    target.complimentary_until = None
-                else:
-                    target.complimentary_until = _later(
-                        target.complimentary_until, incoming.complimentary_until
-                    )
-    incoming_store = store_is_active(incoming) or (
-        incoming.store_expires_at and not store_is_active(target)
-    )
-    if incoming.original_transaction_id and (
-        not target.original_transaction_id or incoming_store
+        elif target.complimentary_until is not None:
+            if incoming.complimentary_until is None:
+                target.complimentary_until = None
+            else:
+                target.complimentary_until = _later(
+                    target.complimentary_until, incoming.complimentary_until
+                )
+    target.trial_started_at = _earlier(target.trial_started_at, incoming.trial_started_at)
+    target.trial_ends_at = _later(target.trial_ends_at, incoming.trial_ends_at)
+
+    target_store = _snapshot_store(target)
+    incoming_store = _snapshot_store(incoming)
+    keep_personal = False
+    if (
+        incoming_store
+        and target_store
+        and incoming_store["original_transaction_id"] != target_store["original_transaction_id"]
     ):
-        if (
-            target.original_transaction_id
-            and target.original_transaction_id != incoming.original_transaction_id
-        ):
-            pass
+        couple_wins = store_is_active(target) or not store_is_active(incoming)
+        _release_store(target)
+        _release_store(incoming)
+        if couple_wins:
+            _apply_store(target, target_store)
+            _apply_store(incoming, incoming_store)
+            _clear_complimentary(incoming)
+            if incoming.user_id is not None:
+                _assign_personal_trial(incoming, incoming.user)
+            keep_personal = True
         else:
-            target.plan = incoming.plan or target.plan
-            target.store = incoming.store or target.store
-            target.product_id = incoming.product_id or target.product_id
-            target.original_transaction_id = incoming.original_transaction_id
-            target.latest_transaction_id = incoming.latest_transaction_id
-            target.purchase_token = incoming.purchase_token or target.purchase_token
-            target.auto_renewing = incoming.auto_renewing
-            target.store_expires_at = _later(target.store_expires_at, incoming.store_expires_at)
-            target.purchased_by = incoming.purchased_by or target.purchased_by
-    target.trial_started_at = target.trial_started_at or incoming.trial_started_at
-    if target.trial_ends_at is None:
-        target.trial_ends_at = incoming.trial_ends_at
+            _apply_store(target, incoming_store)
+            _park_store(target_store)
+    elif incoming_store:
+        _release_store(incoming)
+        _apply_store(target, incoming_store)
+        if target_store:
+            target.store_expires_at = _later(
+                target_store["store_expires_at"], incoming_store["store_expires_at"]
+            )
+            target.purchased_by = incoming_store["purchased_by"] or target_store["purchased_by"]
     target.save()
+    if keep_personal:
+        incoming.save()
+    return keep_personal
+
+
+def _park_store(snapshot: dict) -> None:
+    """Keep a receipt that is not covering the couple on the person who paid."""
+    owner = snapshot.get("purchased_by")
+    if owner is None:
+        return
+    personal = Membership.objects.select_for_update().filter(user=owner).first()
+    if personal is None:
+        personal = Membership(user=owner, **start_trial_fields(owner.date_joined))
+    elif personal.original_transaction_id not in ("", snapshot["original_transaction_id"]):
+        return
+    elif personal.original_transaction_id:
+        _release_store(personal)
+    _apply_store(personal, snapshot)
+    _assign_personal_trial(personal, owner)
+    personal.save()
+
+
+def _earlier(a, b):
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return min(a, b)
 
 
 def grant_complimentary_membership(
