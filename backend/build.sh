@@ -6,7 +6,7 @@ pip install -r requirements.txt
 
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings.production}"
 if [ -z "${ALLOWED_HOSTS:-}" ]; then
-  export ALLOWED_HOSTS="${RAILWAY_PUBLIC_DOMAIN:-.up.railway.app}"
+  export ALLOWED_HOSTS="${RAILWAY_PUBLIC_DOMAIN:-api-nightcap.cuqulabs.com}"
 fi
 
 echo "Collecting static files..."

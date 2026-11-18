@@ -58,7 +58,7 @@ Backend must be reachable on that host (`docker compose up` / Django on port 800
 
 ## EAS production
 
-Set `EXPO_PUBLIC_API_URL` in `eas.json` (`production.env`) before an EAS production build. The intended origin is `https://api.nightcap.app` (Terms / Privacy / Support are served from that host).
+Set `EXPO_PUBLIC_API_URL` in `eas.json` (`production.env`) before an EAS production build. The production origin is `https://api-nightcap.cuqulabs.com` (Terms / Privacy / Support are served from that host).
 
 ## Scripts
 

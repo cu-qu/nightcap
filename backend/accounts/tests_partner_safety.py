@@ -5,8 +5,9 @@ from django.core.management import call_command
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from accounts.memberships import ensure_user_membership, membership_status
-from accounts.models import ContentReport, User
+from accounts.iap import MONTHLY_PRODUCT_ID
+from accounts.memberships import ensure_user_membership, membership_status, serialize_membership
+from accounts.models import ContentReport, Membership, User
 from accounts.partnerships import accept_invite_code, ensure_partnership, get_partner_user
 from entries.models import NightCap
 from entries.recaps import build_month_recap, viewer_can_see_nightcap
@@ -117,12 +118,20 @@ class ContentReportTests(TestCase):
 
 
 class ReviewDemoAccountTests(TestCase):
-    def test_demo4_trial_has_ended(self):
+    def test_demo4_subscription_has_expired(self):
         call_command("create_review_demos", password="reviewpass1", stdout=StringIO())
         demo4 = User.objects.get(username="demo4")
         self.assertTrue(demo4.email_verified)
         self.assertIsNotNone(demo4.profile.onboarding_completed_at)
         membership = ensure_user_membership(demo4)
         self.assertEqual(membership_status(membership), "expired")
+        self.assertEqual(membership.store, Membership.STORE_APPLE)
+        self.assertEqual(membership.plan, Membership.PLAN_MONTHLY)
+        self.assertEqual(membership.product_id, MONTHLY_PRODUCT_ID)
+        self.assertFalse(membership.auto_renewing)
+        payload = serialize_membership(membership, demo4)
+        self.assertEqual(payload["status"], "expired")
+        self.assertEqual(payload["source"], "store")
+        self.assertFalse(payload["is_active"])
         demo1 = ensure_user_membership(User.objects.get(username="demo1"))
         self.assertEqual(membership_status(demo1), "complimentary")

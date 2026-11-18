@@ -92,7 +92,36 @@ describe("paywall", () => {
 
     expect(screen.getByText("Subscribe to keep NightCap for two.")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Manage subscription" })).toBeNull();
     expect(screen.getByText("Delete account")).toBeOnTheScreen();
+  });
+
+  it("shows a lapsed subscription and still offers the plans", async () => {
+    useAuthStore.setState({
+      user: makeUser({
+        membership: {
+          status: "expired",
+          is_active: false,
+          plan: "monthly",
+          source: "store",
+          trial_ends_at: new Date(Date.now() - 10 * 86400000).toISOString(),
+          expires_at: new Date(Date.now() - 86400000).toISOString(),
+          auto_renewing: false,
+          covers_couple: false,
+          product_id: MONTHLY_PRODUCT_ID,
+        },
+      }),
+    });
+    await render(<PaywallScreen />);
+
+    expect(
+      screen.getByText("Your subscription has ended. Subscribe again to keep NightCap for two.")
+    ).toBeOnTheScreen();
+    expect(screen.getByText("$3 / month")).toBeOnTheScreen();
+    expect(screen.getByText("$15 / year")).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Restore purchases" })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Manage subscription" })).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
   });
 
   it("hides plan prices until the store returns them", async () => {

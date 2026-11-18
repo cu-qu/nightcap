@@ -26,7 +26,7 @@ COPY . .
 # Admin CSS/JS must live in the image. Pre-deploy collectstatic runs in a
 # different container and does not reach the one Gunicorn starts.
 RUN DJANGO_SETTINGS_MODULE=config.settings.production \
-    ALLOWED_HOSTS=.up.railway.app \
+    ALLOWED_HOSTS=api-nightcap.cuqulabs.com \
     python manage.py collectstatic --noinput
 
 # Default: keep container alive so devcontainer or compose can run runserver/celery

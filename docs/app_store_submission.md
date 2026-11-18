@@ -15,10 +15,10 @@ Checked 29 Oct 2026 against the app on `main` and Apple’s age-rating and priva
 | Price | Free, with auto-renewable subscriptions |
 | iPhone only | Yes (`supportsTablet` is false). Skip iPad screenshots. |
 | Copyright | `2026 NightCap` — use the legal name on the Apple Developer account if it differs |
-| Support URL | https://nightcap-api-production-ce8f.up.railway.app/support/ |
+| Support URL | https://api-nightcap.cuqulabs.com/support/ |
 | Marketing URL | Leave blank |
-| Privacy Policy URL | https://nightcap-api-production-ce8f.up.railway.app/privacy/ |
-| Terms of Use (EULA) | Use the standard Apple EULA, and keep the Terms of Use link in the description below. Custom EULA field can point at https://nightcap-api-production-ce8f.up.railway.app/terms/ |
+| Privacy Policy URL | https://api-nightcap.cuqulabs.com/privacy/ |
+| Terms of Use (EULA) | Use the standard Apple EULA, and keep the Terms of Use link in the description below. Custom EULA field can point at https://api-nightcap.cuqulabs.com/terms/ |
 
 ## Order before you tap Submit
 
@@ -62,9 +62,9 @@ Each night, log what you spent, the habits you kept, a short note, and an option
 
 A new account includes 30 days. NightCap for two is an auto-renewing subscription, and one subscription covers both people once you are linked. Choose monthly or yearly. Payment is charged to your Apple ID when you confirm. The subscription renews unless you turn off auto-renew at least 24 hours before the period ends. Manage or cancel in Settings → Apple ID → Subscriptions. Subscribing charges today and ends any days still left. Restore purchases is on the plans screen.
 
-Terms of Use: https://nightcap-api-production-ce8f.up.railway.app/terms/
-Privacy Policy: https://nightcap-api-production-ce8f.up.railway.app/privacy/
-Support: https://nightcap-api-production-ce8f.up.railway.app/support/
+Terms of Use: https://api-nightcap.cuqulabs.com/terms/
+Privacy Policy: https://api-nightcap.cuqulabs.com/privacy/
+Support: https://api-nightcap.cuqulabs.com/support/
 
 NightCap is a personal journal. It is not medical, financial, or legal advice.
 ```
@@ -111,7 +111,7 @@ Shared goals, recaps, and nightly check-ins. Renews every year until you cancel.
 **Subscription review notes**
 
 ```
-Sign in as demo4. The 30-day account period has already ended, so Monthly and Yearly open the App Store payment sheet. demo1, demo2, and demo3 have complimentary access, so their plan buttons stay off. Restore purchases is on the same screen. One subscription unlocks both people after they link.
+Sign in as demo4. That account’s monthly subscription has already expired, so the paywall says the subscription has ended and Monthly and Yearly open the App Store payment sheet. Restore purchases and Manage subscription are on the same screen. demo1, demo2, and demo3 have complimentary access, so their plan buttons stay off. One subscription unlocks both people after they link.
 ```
 
 **Subscription review screenshot:** capture the current paywall on demo4, with Yearly and Monthly prices visible, Restore purchases, and the Terms of Use link. The file `mobile/app-store/paywall-review.jpg` still says “month free,” “Terms,” and mentions Google. Leave it out.
@@ -124,10 +124,13 @@ Paste this into App Review Information. Replace the password line in App Store C
 NightCap is a private end-of-day journal for one person or a couple. Sign in with a username and password. Do not tap Create account. A new account stays on Confirm your email until a message from nightcap@cuqulabs.com is opened.
 
 All four accounts use the same password.
+demo4 is the account with an expired subscription. Use it for the purchase flow.
+Username: demo4
+Password: PASTE HERE
+
+demo4 — solo, verified, onboarded. Monthly subscription (com.nightcap.app.couple.monthly) has expired. The paywall is required. Monthly and Yearly open the payment sheet. Restore purchases and Manage subscription are on that screen.
 demo1 — solo, verified, onboarded, complimentary access. Plan buttons stay off.
 demo2 and demo3 — already linked as partners, complimentary access. Plan buttons stay off.
-demo4 — solo, verified, onboarded, 30-day period already ended. Monthly and Yearly open the payment sheet.
-Password: PASTE HERE
 
 Path on demo1 or demo2:
 1. Sign in.
@@ -136,7 +139,7 @@ Path on demo1 or demo2:
 4. Settings → See plans shows the subscription screen. Restore purchases, Redeem Apple offer code, Terms of Use, Privacy, and Support are on that screen.
 5. Settings → Delete account removes the account. Deletion does not cancel an Apple subscription. Please use a separate account for that step, not these demos.
 
-On demo4, Settings → See plans, then tap Monthly or Yearly. Products: com.nightcap.app.couple.monthly and com.nightcap.app.couple.yearly. One subscription covers both people once they are linked.
+demo4 opens on the plans screen because the subscription has expired. Tap Monthly or Yearly. Products: com.nightcap.app.couple.monthly and com.nightcap.app.couple.yearly. One subscription covers both people once they are linked.
 
 On demo2, a partner moment can be reported from Settings → Report partner, from the nightly check-in, or from a shared recap. Settings → Block partner unlinks and stops that person from joining again. Reports go to night_cap_app@proton.me.
 
@@ -144,9 +147,9 @@ Notifications and the camera are optional. The Settings button that leads to the
 
 No third-party ads, no tracking, no Sign in with Apple, no phone number, no AI features. Encryption is standard HTTPS only.
 
-Privacy https://nightcap-api-production-ce8f.up.railway.app/privacy/
-Terms of Use https://nightcap-api-production-ce8f.up.railway.app/terms/
-Support https://nightcap-api-production-ce8f.up.railway.app/support/
+Privacy https://api-nightcap.cuqulabs.com/privacy/
+Terms of Use https://api-nightcap.cuqulabs.com/terms/
+Support https://api-nightcap.cuqulabs.com/support/
 ```
 
 A short screen recording from a cold launch through sign-in, one night logged, and the demo4 payment sheet helps a first submission. Attach it on the same App Review Information page.
@@ -218,7 +221,7 @@ Made for Kids: No. The privacy policy says NightCap is not directed at children 
 
 Created on the production API on 29 Oct 2026. Usernames: `demo1`, `demo2`, `demo3`, `demo4`. Emails are `demo1@nightcap.app` through `demo4@nightcap.app`. Sign-in uses the username. The shared password is not stored in this file.
 
-Refresh them on the production API after this code is deployed:
+`demo4` must be an expired App Store subscription, not only an ended 30-day period. Refresh the accounts on the production API after this code is deployed, before the next review:
 
 ```bash
 python manage.py create_review_demos --password '<the review password>'
