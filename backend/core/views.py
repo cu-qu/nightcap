@@ -17,6 +17,7 @@ class HealthCheckSerializer(serializers.Serializer):
 )
 class HealthCheckView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = []
 
     def get(self, request):
         return Response({"status": "ok"}, status=status.HTTP_200_OK)
