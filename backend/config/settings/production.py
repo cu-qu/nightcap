@@ -1,14 +1,15 @@
 import logging
 
-from config.hosts import parse_allowed_hosts, trusted_origins
+from config.hosts import PUBLIC_API_HOST, parse_allowed_hosts, trusted_origins
 from config.r2 import configured_media_storages, r2_is_enabled
 
 from .base import *
 
 DEBUG = os.environ.get("DEBUG", "false").lower() in ("true", "1", "yes")
+_public_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip() or PUBLIC_API_HOST
 ALLOWED_HOSTS = parse_allowed_hosts(
     os.environ.get("ALLOWED_HOSTS", ""),
-    os.environ.get("RAILWAY_PUBLIC_DOMAIN", ""),
+    _public_domain,
 )
 
 # Recompute after production DEBUG default (base.py defaults DEBUG to True).
@@ -29,7 +30,7 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 CSRF_TRUSTED_ORIGINS = trusted_origins(
     os.environ.get("CSRF_TRUSTED_ORIGINS", ""),
-    os.environ.get("RAILWAY_PUBLIC_DOMAIN", ""),
+    _public_domain,
 )
 CORS_ALLOWED_ORIGINS = [
     origin for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if origin

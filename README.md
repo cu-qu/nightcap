@@ -8,7 +8,7 @@ The original `night_cap_backend` and `night_cap_mobile` repos are unchanged. Thi
 
 | Path | What |
 |---|---|
-| `backend/` | Django 5.x + DRF + JWT. PostgreSQL, Redis, Celery. Railway-ready. |
+| `backend/` | Django 5.x + DRF + JWT. PostgreSQL, Redis, Celery. Production API: `https://api-nightcap.cuqulabs.com`. |
 | `mobile/` | Expo (SDK 57) + TypeScript + NativeWind client |
 
 ## Local

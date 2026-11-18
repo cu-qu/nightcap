@@ -1,16 +1,14 @@
 """Check APNs credentials and send one test alert.
 
-Run from the repo root, against the API container (it has the key and the database):
+Run inside the production API container (it has the key and the database):
 
-  railway ssh -s "nightcap api" -e production \\
-    python manage.py shell -c "$(cat backend/scripts/verify_apns.py)"
+  python manage.py shell -c "$(cat backend/scripts/verify_apns.py)"
 
 That lists credentials and registered iPhones. It does not send.
 
 To deliver a test notification:
 
-  railway ssh -s "nightcap api" -e production \\
-    env APNS_VERIFY_SEND=1 python manage.py shell -c "$(cat backend/scripts/verify_apns.py)"
+  env APNS_VERIFY_SEND=1 python manage.py shell -c "$(cat backend/scripts/verify_apns.py)"
 
 Set APNS_VERIFY_USER to a username to target one account. Otherwise every
 registered iOS token is tried. Sandbox tokens go to Apple's sandbox first.

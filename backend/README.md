@@ -7,7 +7,7 @@ Django REST API for the NightCap iOS habit and budget tracker.
 - Django 5.x and Django REST Framework
 - PostgreSQL via `DATABASE_URL` or `DJANGO_DB_*` environment variables
 - Simple JWT authentication
-- Railway-ready Gunicorn deployment
+- Gunicorn deployment. Production host: `https://api-nightcap.cuqulabs.com`
 
 ## Local Development
 

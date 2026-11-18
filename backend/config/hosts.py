@@ -1,5 +1,8 @@
 from django.core.exceptions import ImproperlyConfigured
 
+PUBLIC_API_HOST = "api-nightcap.cuqulabs.com"
+PUBLIC_API_ORIGIN = f"https://{PUBLIC_API_HOST}"
+
 
 def trusted_origins(raw: str, public_domain: str = "") -> list[str]:
     origins = [origin.strip() for origin in (raw or "").split(",") if origin.strip()]

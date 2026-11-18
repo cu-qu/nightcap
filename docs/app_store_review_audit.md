@@ -2,7 +2,7 @@
 
 **App:** NightCap (`NightCap` on device) — couple habit / end-of-day ritual tracker  
 **Client:** Expo SDK 58 + React Native 0.88 + Expo Router (`mobile/`)  
-**Backend:** Django API on Railway (`EXPO_PUBLIC_API_URL` in `mobile/eas.json`)  
+**Backend:** Django API at `https://api-nightcap.cuqulabs.com` (`EXPO_PUBLIC_API_URL` in `mobile/eas.json`)  
 **iOS bundle ID:** `com.dailynightcap.app` (`mobile/app.json`)  
 **Audit date:** 2026-10-28  
 **Guidelines:** [App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/) (Oct 16, 2026)
@@ -41,10 +41,10 @@ Legend: **PASS** · **FAIL** · **N/A** · **NEEDS-HUMAN** · **FIXED** (this PR
 | Item | Status | Evidence / notes |
 |------|--------|------------------|
 | No placeholder UI copy | PASS | Grep: no lorem/TODO/coming soon in `mobile/app` or `mobile/src`. Auth placeholders `you@example.com` are field hints only. |
-| No dev endpoints in Release | PASS | Production API: `mobile/eas.json` → `EXPO_PUBLIC_API_URL` → Railway HTTPS. `mobile/src/api/client.ts` defaults to localhost only when env unset (dev). |
+| No dev endpoints in Release | PASS | Production API: `mobile/eas.json` → `EXPO_PUBLIC_API_URL` → `https://api-nightcap.cuqulabs.com`. `mobile/src/api/client.ts` defaults to localhost only when env unset (dev). |
 | Crash risks (force unwrap, etc.) | PASS (code scan) | No `fatalError` / `try!` in TS app code. **NEEDS-HUMAN:** Release smoke test on physical device. |
 | iPad support | PASS | `supportsTablet: false` → iPhone-only (`mobile/app.json`) |
-| Legal/support URLs return 200 | PASS | `curl -I` 200 for `{API}/privacy/`, `/terms/`, `/support/` (Railway production host in `eas.json`) |
+| Legal/support URLs return 200 | PASS | `https://api-nightcap.cuqulabs.com/privacy/`, `/terms/`, and `/support/` return 200 |
 
 ---
 
@@ -230,7 +230,7 @@ All three have **email already verified** and **onboarding complete** — no ema
 
 **Feature flags / hidden behavior:** None in release builds. No debug menus. Push notifications optional (partner nudges + nightly reminder).
 
-**External services:** Django REST API (Railway URL in production build env), Apple Push Notification service for partner nudges, Apple In-App Purchase (StoreKit 2 via `expo-iap`). No third-party AI. Legal pages served from API origin (`/privacy/`, `/terms/`, `/support/`).
+**External services:** Django REST API at `https://api-nightcap.cuqulabs.com`, Apple Push Notification service for partner nudges, Apple In-App Purchase (StoreKit 2 via `expo-iap`). No third-party AI. Legal pages served from that origin (`/privacy/`, `/terms/`, `/support/`).
 
 **Encryption:** Standard HTTPS only — `ITSAppUsesNonExemptEncryption` = NO.
 
@@ -247,7 +247,7 @@ All three have **email already verified** and **onboarding complete** — no ema
 - [ ] ASC metadata: description (mention subscription + trial), **Terms URL** in description/EULA, privacy URL, screenshots, age rating, category
 - [ ] Privacy nutrition label in ASC (align with `backend/legal/PRIVACY_POLICY.md`)
 - [ ] Optional: screen recording for review
-- [ ] Decide on custom domain (`api.nightcap.app` in README vs Railway URL in `eas.json`) for long-term branding
+- [x] Production API is `https://api-nightcap.cuqulabs.com` (`mobile/eas.json`). The old Railway host is retired.
 - [ ] Physical device smoke test before submit
 
 ---

@@ -177,12 +177,17 @@ SIMPLE_JWT = {
 
 def _public_app_url() -> str:
     """Origin used in verification and password-reset links."""
+    from config.hosts import PUBLIC_API_ORIGIN
+
     explicit = os.environ.get("FRONTEND_URL", "").strip()
     if explicit:
         return explicit.rstrip("/")
-    railway_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
-    if railway_domain:
-        return f"https://{railway_domain}".rstrip("/")
+    public_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    if public_domain:
+        return f"https://{public_domain}".rstrip("/")
+    settings_module = os.environ.get("DJANGO_SETTINGS_MODULE", "")
+    if settings_module.endswith("production"):
+        return PUBLIC_API_ORIGIN
     return "http://localhost:8000"
 
 
@@ -262,7 +267,7 @@ REST API for the NightCap iOS habit and budget tracker.
 - **Calendar / Charts** - Month markers and daily/weekly graph series for the mobile app.
 - **Dashboard** - Streaks, weekly summaries, and finance totals for the signed-in user.
 - **Export** - Trigger a JSON data export payload for offline-first sync and portability.
-- **Health** - Lightweight service health check for Railway.
+- **Health** - Lightweight service health check.
 """,
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
