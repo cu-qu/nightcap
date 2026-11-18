@@ -134,7 +134,10 @@ export default function PaywallScreen() {
             void iap.redeemCode();
           }}
         />
-        {entitled || user?.membership?.source === "store" ? (
+        {entitled ||
+        user?.membership?.source === "store" ||
+        (user?.membership?.status === "expired" &&
+          (!!user.membership.product_id || !!user.membership.plan)) ? (
           <PrimaryButton
             title="Manage subscription"
             variant="ghost"

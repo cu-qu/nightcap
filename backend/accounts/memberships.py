@@ -83,8 +83,12 @@ def serialize_membership(membership: Membership | None, user=None) -> dict | Non
         expires_at = membership.trial_ends_at
         source = "trial"
     else:
-        expires_at = membership.store_expires_at or membership.trial_ends_at
-        source = "none"
+        if membership.store or membership.product_id or membership.store_expires_at:
+            expires_at = membership.store_expires_at
+            source = "store"
+        else:
+            expires_at = membership.trial_ends_at
+            source = "none"
     return {
         "status": status,
         "is_active": status != "expired",

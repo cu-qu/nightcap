@@ -4,8 +4,9 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
+from accounts.iap import MONTHLY_PRODUCT_ID
 from accounts.memberships import ensure_user_membership, grant_complimentary_membership
-from accounts.models import User
+from accounts.models import Membership, User
 from accounts.partnerships import accept_invite_code, ensure_partnership, get_partner_user
 from categories.defaults import sync_default_categories_for_user
 from goals.onboarding_services import complete_onboarding
@@ -21,9 +22,9 @@ DEMOS = (
 class Command(BaseCommand):
     help = (
         "Create or refresh the App Review accounts: demo1 solo, "
-        "demo2 and demo3 linked as partners, and demo4 solo with an ended "
-        "trial so the payment sheet can open. Email is already verified and "
-        "onboarding is complete. demo1–demo3 do not expire."
+        "demo2 and demo3 linked as partners, and demo4 solo with an expired "
+        "App Store subscription so the payment sheet can open. Email is already "
+        "verified and onboarding is complete. demo1–demo3 do not expire."
     )
 
     def add_arguments(self, parser):
@@ -55,13 +56,13 @@ class Command(BaseCommand):
             for user in users.values():
                 complete_onboarding(user)
                 sync_default_categories_for_user(user)
-            _end_trial(users["demo4"])
+            _expire_subscription(users["demo4"])
 
         self.stdout.write(self.style.SUCCESS("App Review demos are ready."))
         self.stdout.write("demo1  solo, complimentary")
         self.stdout.write("demo2  partnered with demo3, complimentary")
         self.stdout.write("demo3  partnered with demo2")
-        self.stdout.write("demo4  solo, trial ended — payment sheet")
+        self.stdout.write("demo4  solo, monthly subscription expired — payment sheet")
 
     def _upsert(self, spec: dict, password: str) -> User:
         username = spec["username"]
@@ -89,8 +90,8 @@ class Command(BaseCommand):
         return user
 
 
-def _end_trial(user) -> None:
-    """Leave a verified account on the paywall with working subscribe buttons."""
+def _expire_subscription(user) -> None:
+    """Leave a verified account on the paywall with a lapsed App Store subscription."""
     now = timezone.now()
     membership = ensure_user_membership(user)
     membership.complimentary = False
@@ -99,7 +100,16 @@ def _end_trial(user) -> None:
     membership.granted_at = None
     membership.grant_note = ""
     membership.trial_started_at = now - timedelta(days=40)
-    membership.trial_ends_at = now - timedelta(days=1)
+    membership.trial_ends_at = now - timedelta(days=10)
+    membership.plan = Membership.PLAN_MONTHLY
+    membership.store = Membership.STORE_APPLE
+    membership.product_id = MONTHLY_PRODUCT_ID
+    membership.original_transaction_id = "review-demo4-expired"
+    membership.latest_transaction_id = "review-demo4-expired"
+    membership.purchase_token = ""
+    membership.auto_renewing = False
+    membership.store_expires_at = now - timedelta(days=1)
+    membership.purchased_by = user
     membership.save(
         update_fields=[
             "complimentary",
@@ -109,6 +119,15 @@ def _end_trial(user) -> None:
             "grant_note",
             "trial_started_at",
             "trial_ends_at",
+            "plan",
+            "store",
+            "product_id",
+            "original_transaction_id",
+            "latest_transaction_id",
+            "purchase_token",
+            "auto_renewing",
+            "store_expires_at",
+            "purchased_by",
             "updated_at",
         ]
     )

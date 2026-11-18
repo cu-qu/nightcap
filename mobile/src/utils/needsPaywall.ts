@@ -34,5 +34,12 @@ export function membershipSummary(user: User | null | undefined): string {
       ? `${plan} · covers both of you`
       : `${plan} membership`;
   }
+  if (
+    membership.source === "store" ||
+    membership.product_id ||
+    membership.plan
+  ) {
+    return "Your subscription has ended. Subscribe again to keep NightCap for two.";
+  }
   return "Subscribe to keep NightCap for two.";
 }
